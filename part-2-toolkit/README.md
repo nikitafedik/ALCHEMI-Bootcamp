@@ -4,13 +4,4 @@ Interactive Jupyter notebook that predicts the melting point of a molecular crys
 
 ## Deployment
 
-This notebook runs from the unified compose stack at the repo root alongside Part 1. See [the repo README](../README.md) for setup and port table.
-
-Part 2 is standalone — no NGC API key required. If you only want to run Part 2, skip the BGR sidecar:
-
-```bash
-cd build
-docker compose up jupyter prometheus grafana
-```
-
-The notebook is reachable at `http://localhost:8888/lab` (`part-2-toolkit/melting-point-slc.ipynb`).
+This notebook runs from the same JupyterLab container as Part 1 — see the [repo README](../README.md) for the bundle-load and launcher (`run-jupyter.sh` or `run.sbatch`) instructions. Part 2 is **standalone** — no NGC API key, no BGR NIM, no `00_container_setup.ipynb`. Open the notebook (`part-2-toolkit/melting-point-slc.ipynb`) directly in JupyterLab once the container is up.

@@ -5,6 +5,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git g++ ca-certificates bzip2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI (static binary). The setup notebook runs `!docker run …` from inside
+# this container to spawn sibling NIM/Prometheus/Grafana containers on the host
+# via the bind-mounted /var/run/docker.sock.
+ARG DOCKER_CLI_VERSION=27.3.1
+RUN curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz \
+    && tar -xzf /tmp/docker.tgz -C /tmp \
+    && mv /tmp/docker/docker /usr/local/bin/docker \
+    && rm -rf /tmp/docker /tmp/docker.tgz
+
 # Install Miniforge (open-source conda + mamba). Multiarch installer.
 RUN ARCH=$(uname -m) && \
     curl -fsSL -o /tmp/miniforge.sh \
@@ -55,4 +64,5 @@ COPY part-1-nim ./part-1-nim
 COPY part-2-toolkit ./part-2-toolkit
 
 EXPOSE 8888
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", \
+     "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.disable_check_xsrf=True"]

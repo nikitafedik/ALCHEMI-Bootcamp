@@ -1,6 +1,6 @@
 # ALCHEMI Playbook
 
-This playbook provides researchers hands-on approaches for GPU-accelerated computational chemistry and materials discovery with NVIDIA ALCHEMI. Across two tutorials, participants screen oxide catalysts for the oxygen-evolution reaction and predict the melting point of a molecular crystal — both running entirely from a single Docker container with JupyterLab at port 8888.
+This playbook provides researchers hands-on approaches for GPU-accelerated computational chemistry and materials discovery with NVIDIA ALCHEMI. Across two tutorials, participants screen oxide catalysts for the oxygen-evolution reaction and predict the melting point of a molecular crystal — running from a JupyterLab container that spawns the BGR NIM and monitoring stack as sibling containers on per-participant random ports.
 
 ## Playbook contents
 
@@ -34,43 +34,60 @@ Approximately **90–120 minutes per part** (~3–4 hours total).
 | NGC API key | Required for Part 1's live BGR NIM service. Generate one at [build.nvidia.com](https://build.nvidia.com). Part 2 needs no NGC entitlement. |
 | Internet | Needed during initial container build and image pulls. |
 
-## Deploying the Playbook
+## Deployment
 
-Both parts run from a single unified Docker container alongside the BGR NIM service, Prometheus, and Grafana — all orchestrated via Docker Compose.
+The playbook ships as an offline **image bundle**. The lab admin loads it onto each VM once; participants then launch JupyterLab and use `00_container_setup.ipynb` to spin up their own per-participant NIM and monitoring stack.
+
+### Bundle contents
+
+`build/build-bundle.sh` produces a single `alchemi-bundle.tar` (~40–50 GB) containing four images:
+
+| Image | Purpose |
+|-------|---------|
+| `alchemi-playbook:latest` | JupyterLab + conda env + tutorials (built from `build/Dockerfile`) |
+| `nvcr.io/nim/nvidia/alchemi-bgr:1.0.0` | BGR NIM (MACE-MP-0) |
+| `prom/prometheus:latest` | Metrics scraping |
+| `grafana/grafana:latest` | Metrics dashboards |
+
+### Building the bundle (one-time, by the lab admin)
 
 ```bash
-cd build
-cp .env.example .env       # then edit .env and set NGC_API_KEY
-set -a; source .env; set +a
 echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-docker compose up          # builds the unified image and starts all services
+./build/build-bundle.sh                    # → alchemi-bundle.tar
 ```
 
-Once running, the services are reachable at:
+### Per-VM provisioning
 
-| Service    | URL                                  |
-|------------|--------------------------------------|
-| Jupyter    | http://localhost:8888/lab            |
-| BGR NIM    | http://localhost:8000/v1/...         |
-| Grafana    | http://localhost:3000 (admin/admin)  |
-| Prometheus | http://localhost:9090                |
+Pick one launcher depending on where the workshop runs:
 
-Open the Jupyter URL in your browser and launch either notebook:
-
-- `part-1-nim/alchemi-oer-catalyst-screening.ipynb`
-- `part-2-toolkit/melting-point-slc.ipynb`
-
-### Running Part 2 only (no NGC entitlement)
-
-If you only want to work through Part 2, skip the BGR sidecar:
+**Standalone VM** — interactive shell on a single GPU box:
 
 ```bash
-docker compose up jupyter prometheus grafana
+docker load -i alchemi-bundle.tar          # loads all four images
+./build/run-jupyter.sh                     # starts JupyterLab on :8888
 ```
+
+**Slurm cluster** — submit a job that picks a random jupyter port and writes the SSH-forward hint to `~/port_forwarding_command`:
+
+```bash
+sbatch build/run.sbatch                    # adjust BUNDLE_TAR / REPO_ROOT for your cluster
+cat ~/port_forwarding_command
+```
+
+Both launchers mount the host's docker socket and expose `host.docker.internal` so the setup notebook can spawn sibling BGR/Prom/Grafana containers on random ports.
+
+### Participant workflow
+
+1. Open JupyterLab:
+   - **Standalone VM:** `http://<lab-vm-host>:8888/lab`
+   - **Slurm:** open the SSH tunnel from `~/port_forwarding_command`, then `http://localhost:9999/lab`
+2. Run **[`part-1-nim/00_container_setup.ipynb`](part-1-nim/00_container_setup.ipynb)** end-to-end. It allocates three random ports (BGR, Prometheus, Grafana), writes `part-1-nim/config.py` with the choice, and launches the three sibling containers.
+3. Open **[`part-1-nim/alchemi-oer-catalyst-screening.ipynb`](part-1-nim/alchemi-oer-catalyst-screening.ipynb)** — it imports `config.BGR_SERVER` automatically.
+4. Part 2 (`part-2-toolkit/melting-point-slc.ipynb`) needs no setup notebook; it runs entirely inside JupyterLab with no NIM dependency.
 
 ### FAST_DEMO mode (offline, no live BGR)
 
-Part 1's control-panel cell exposes a `FAST_DEMO = True` toggle. When enabled, the notebook reads pre-cached BGR responses from `part-1-nim/cached_responses/oer-catalyst-screening/` instead of calling the live BGR NIM. Useful for workshop settings without an NGC entitlement or with limited GPU availability.
+Part 1's control-panel cell exposes a `FAST_DEMO = True` toggle. When enabled, the notebook reads pre-cached BGR responses from `part-1-nim/cached_responses/oer-catalyst-screening/` instead of calling the live BGR NIM. Useful for sessions without an NGC entitlement or with limited GPU availability — you can skip `00_container_setup.ipynb` entirely.
 
 ## License
 

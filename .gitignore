@@ -1,3 +1,10 @@
+# Per-participant artifacts from 00_container_setup.ipynb
+**/.runtime/
+**/config.py
+# Lab bundle (built by build/build-bundle.sh, distributed out-of-band)
+alchemi-bundle.tar
+alchemi-bundle.tar.gz
+
 **/outputs/
 **/logs/
 # Cache CSVs shipped to students for FAST_DEMO progress-replay

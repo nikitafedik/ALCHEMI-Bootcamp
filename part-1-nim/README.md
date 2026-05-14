@@ -16,11 +16,11 @@ Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MA
 
 ## Deployment
 
-The unified compose stack at the repo root runs this notebook, Part 2, the BGR NIM sidecar, Prometheus, and Grafana. See [the repo README](../README.md) for setup and port table.
+Run **[`00_container_setup.ipynb`](00_container_setup.ipynb)** first — it allocates random ports for the BGR NIM, Prometheus, and Grafana, then launches all three as sibling containers on the lab VM. The screening notebook reads the BGR port from the `config.py` that the setup notebook writes. See the [repo README](../README.md) for the bundle-build / lab-admin side of the workflow.
 
 ### BGR NIM Configuration
 
-The compose stack configures the BGR NIM with:
+The setup notebook launches BGR with:
 
 | Setting | Variable | Value |
 |---------|----------|-------|
@@ -32,7 +32,7 @@ The compose stack configures the BGR NIM with:
 
 ### Monitoring
 
-Prometheus scrapes BGR metrics at `/v1/metrics`. View them in Grafana at `localhost:3000` (datasource auto-provisioned). The BGR status endpoint is also available at `localhost:8000/v1/status`.
+Prometheus scrapes BGR metrics at `/v1/metrics` and Grafana auto-provisions Prometheus as its default datasource. Both run on random per-participant ports printed in the last cell of `00_container_setup.ipynb`. Grafana credentials are `admin / admin`.
 
 ## FAST_DEMO Mode
 
