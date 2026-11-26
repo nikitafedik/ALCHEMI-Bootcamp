@@ -1,0 +1,59 @@
+# Light plot style matching the MIT deck charts: white, thin grey grid, grey
+# series, one green emphasised series, open markers for references.
+# Colours as in shared/alchemi-deck.mplstyle.
+figure.facecolor: FFFFFF
+savefig.facecolor: FFFFFF
+axes.facecolor: FFFFFF
+axes.edgecolor: B8B8B8
+axes.linewidth: 1.0
+axes.labelcolor: 4A4A4A
+axes.titlecolor: 1A1A1A
+axes.spines.top: False
+axes.spines.right: False
+axes.grid: True
+axes.grid.axis: y
+axes.axisbelow: True
+# C0 main result (green), C1 baseline (mid grey), C2 light grey, C3 deep green, C4 reference (ink)
+axes.prop_cycle: cycler('color', ['76B900', '6F6F6F', 'B8B8B8', '4B7A00', '1A1A1A'])
+grid.color: ECECEC
+grid.linewidth: 1.0
+lines.linewidth: 2.2
+lines.markersize: 6
+text.color: 1A1A1A
+xtick.color: 6F6F6F
+ytick.color: 6F6F6F
+xtick.labelcolor: 6F6F6F
+ytick.labelcolor: 6F6F6F
+legend.frameon: False
+legend.labelcolor: 4A4A4A
+
+# ---- Course figure standard (draft, 2026-11-25) ----------------------------
+# One width: 920 px in the notebook = 9.2 in at 100 px per inch. Saved at 2x.
+# Text in px at that width (pt = px x 0.72): title 15, labels 13, small 11.
+figure.figsize: 9.2, 4.0
+figure.dpi: 100
+savefig.dpi: 200
+# no tight crop: it changes the width, and with it every text size
+savefig.bbox: standard
+savefig.pad_inches: 0
+figure.constrained_layout.use: True
+font.family: sans-serif
+font.sans-serif: Open Sans, DejaVu Sans
+font.monospace: DejaVu Sans Mono
+# 13 px: body text, value labels, line names, legend, category labels
+font.size: 9.36
+# 15 px bold: pane titles
+axes.titlesize: 10.8
+axes.titleweight: bold
+axes.titlelocation: left
+axes.titlepad: 8
+# 13 px: axis labels
+axes.labelsize: 9.36
+# 11 px: tick labels
+xtick.labelsize: 7.92
+ytick.labelsize: 7.92
+# 13 px: legend
+legend.fontsize: 9.36
+legend.title_fontsize: 9.36
+figure.titlesize: 10.8
+figure.titleweight: bold

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from time import perf_counter
 from typing import Any
@@ -235,8 +235,13 @@ def relax_selected_structures(
     distortion_std_angstrom: float = 0.10,
     distortion_seed: int = 7,
     batch_multiplier: int,
+    player_factory: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Relax one picker selection as a single Batch for the Module 00 tour."""
+    """Relax one picker selection as a single Batch for the Module 00 tour.
+
+    ``player_factory`` receives the preview dict and returns the player to show.
+    ``None`` uses ``show_relaxation_player``.
+    """
 
     specs = selection.selected_specs()
     if len(specs) > MAX_RELAXATION_SYSTEMS:
@@ -297,7 +302,7 @@ def relax_selected_structures(
         "batch_multiplier": batch_multiplier,
         "labels": labels,
         "preview": preview,
-        "player": show_relaxation_player(**preview),
+        "player": (player_factory or show_relaxation_player)(**preview),
     }
 
 

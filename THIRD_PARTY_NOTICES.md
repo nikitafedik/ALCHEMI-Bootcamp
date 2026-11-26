@@ -13,6 +13,9 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 | Mg-MOF-74 primitive structure | MIT | `notebooks/data/mof74/README.md` |
 | 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
 | py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
+| three.js 0.186.1 bundle | MIT | `shared/three-0.186.1/LICENSE` |
+| Open Sans font files (Regular, Bold) for course figures | SIL OFL 1.1 | `shared/fonts/OFL.txt` |
+| Lucide icon shapes in course graphics (`notebooks/assets/core00-*.svg`, `explore-*-light.svg`, `fork-*-light.svg`) | ISC | `shared/lucide-icons/LICENSE` |
 
 ### NCI Atlas data
 
@@ -37,6 +40,21 @@ under `shared/3dmol-2.5.5/` apply to the standalone file and generated viewer
 HTML.
 
 3Dmol.js publication: <https://doi.org/10.1093/bioinformatics/btu829>
+
+### three.js
+
+The Module 00 structure explorer and relaxation player draw structures with
+[three.js 0.186.1](https://github.com/mrdoob/three.js), an MIT-licensed
+WebGL library. The repository stores the checked bundle and its license under
+`shared/three-0.186.1/`; the course viewer code that uses it is in
+`shared/alchemi-viewer/`.
+
+### Open Sans
+
+Course figures drawn with Matplotlib use [Open Sans](https://github.com/googlefonts/opensans),
+Copyright 2020 The Open Sans Project Authors, licensed under the SIL Open Font
+License, Version 1.1. The repository stores `OpenSans-Regular.ttf`,
+`OpenSans-Bold.ttf` and the license text `OFL.txt` under `shared/fonts/`.
 
 ### RASPA2 Mg-MOF-74 data
 

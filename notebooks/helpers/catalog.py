@@ -168,6 +168,25 @@ def load_mof74(
     return structure
 
 
+def _srtio3() -> Atoms:
+    """Build cubic perovskite SrTiO3 (Pm-3m, a = 3.905 A) as a 2x2x2 supercell."""
+
+    from ase.spacegroup import crystal
+
+    structure = crystal(
+        ["Sr", "Ti", "O"],
+        basis=[(0, 0, 0), (0.5, 0.5, 0.5), (0.5, 0.5, 0)],
+        spacegroup=221,
+        cellpar=[3.905, 3.905, 3.905, 90, 90, 90],
+    ).repeat((2, 2, 2))
+    structure.pbc = True
+    structure.info["source"] = (
+        "Built with ASE from space group Pm-3m and a = 3.905 Å "
+        "(Schmidbauer, Kwasniewski and Schwarzkopf, 2012)"
+    )
+    return structure
+
+
 def _smiles_builder(smiles: str) -> Callable[[], Atoms]:
     return lambda: structure_from_smiles(smiles)
 
@@ -375,14 +394,14 @@ def opening_performance_catalog() -> dict[str, MoleculeSpec]:
             ),
         ),
         MoleculeSpec(
-            "mg_mof74",
-            "Mg-MOF-74",
-            "Carbon capture",
-            "Porous CO₂ adsorbent",
-            "C24H6Mg6O18",
-            54,
+            "srtio3",
+            "Strontium titanate (SrTiO₃)",
+            "Solar water splitting",
+            "Perovskite photocatalyst",
+            "O24Sr8Ti8",
+            40,
             True,
-            load_mof74,
+            _srtio3,
         ),
     )
     return {entry.key: entry for entry in entries}

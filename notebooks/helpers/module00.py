@@ -9,7 +9,7 @@ from typing import Any
 
 from .catalog import opening_performance_catalog
 from .common import configure_tutorial
-from .viewers import show_structure_explorer
+from .viewers_three import show_structure_explorer_three as show_structure_explorer
 
 __all__ = [
     "configure_tutorial",
@@ -23,14 +23,23 @@ __all__ = [
 def relax_selected_structures(*args: Any, **kwargs: Any) -> dict[str, Any]:
     """Load the relaxation implementation when the learner starts the run."""
 
-    from .relaxation import relax_selected_structures as implementation
+    from .viewers_three import show_relaxation_player_three
 
+    if "steps" in kwargs:
+        # The fixed-step FIRE2 run stays available to older callers.
+        from .relaxation import relax_selected_structures as implementation
+    else:
+        from .relaxation_lbfgs import (
+            relax_selected_structures_lbfgs as implementation,
+        )
+
+    kwargs.setdefault("player_factory", show_relaxation_player_three)
     return implementation(*args, **kwargs)
 
 
 def plot_relaxation_time_perspective(*args: Any, **kwargs: Any) -> None:
     """Load the plotting implementation when the learner requests the plot."""
 
-    from .relaxation import plot_relaxation_time_perspective as implementation
+    from .batching_figure import plot_relaxation_time_perspective as implementation
 
     implementation(*args, **kwargs)

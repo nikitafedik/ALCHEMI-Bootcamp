@@ -56,8 +56,35 @@ def _ignore_known_aimnet2_cutoff_warning() -> None:
     )
 
 
+def register_course_fonts() -> list[str]:
+    """Register the fonts shipped in ``shared/fonts`` with Matplotlib; return their family names.
+
+    Matplotlib only finds fonts it has registered, so this runs before a course style
+    names one (the figure standard uses Open Sans). A missing folder registers nothing.
+    """
+
+    from matplotlib import font_manager
+
+    families = []
+    folder = _PROJECT_ROOT / "shared" / "fonts"
+    for path in sorted(folder.glob("*.ttf")) + sorted(folder.glob("*.otf")):
+        font_manager.fontManager.addfont(str(path))
+        families.append(font_manager.FontProperties(fname=str(path)).get_name())
+    return families
+
+
+def current_theme() -> str:
+    """Return the course theme. The notebooks are light only."""
+
+    return "light"
+
+
 def configure_tutorial() -> None:
-    """Apply the shared tutorial style and silence known library notices."""
+    """Apply the shared light tutorial style and silence known library notices.
+
+    The course is light only: plots, widgets, the picker and the player use the
+    light style.
+    """
 
     _configure_local_runtime()
     import matplotlib.pyplot as plt
@@ -69,7 +96,8 @@ def configure_tutorial() -> None:
         category=UserWarning,
         module=r"rich\.live",
     )
-    plt.style.use(_PROJECT_ROOT / "shared" / "alchemi-dark.mplstyle")
+    register_course_fonts()
+    plt.style.use(_PROJECT_ROOT / "shared" / "alchemi-deck.mplstyle")
     _prime_tree_set_notice()
 
 
