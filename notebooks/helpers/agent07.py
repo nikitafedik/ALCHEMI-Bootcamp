@@ -43,8 +43,9 @@ NOTEBOOK = "notebooks/alchemi-agent-07-one-out-one-in.ipynb"
 INITIAL_TEMPERATURE = 50.0  # K for each independent velocity draw
 RANDOM_SEED = 42
 BATCH_MULTIPLIER = 26  # trajectories per complex (the notebook's value): 3,874 trajectories
-# The capacity (the notebook's values): the batch size at which the GPU is fully busy, measured on
-# an RTX PRO 6000; above it a step takes longer in proportion to the atoms.
+# The capacity (the notebook's values): a batch size at which the course GPU (L40S) is close to
+# fully busy, about 90 % of its top throughput; above it a step takes longer almost in proportion
+# to the atoms.
 MAX_BATCH_SIZE = 1308  # trajectories in the active batch
 MAX_ATOMS = 20000  # atoms in the active batch
 # Complexes below this size are left out of the study: for 4 to 7 atoms the temperature of one
