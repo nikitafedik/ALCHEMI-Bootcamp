@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import csv
 import functools
+import re
 import textwrap
 from html import escape
 from pathlib import Path
@@ -37,11 +38,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _STYLE = _PROJECT_ROOT / "shared" / "alchemi-figure.mplstyle"
 DISPLAY_PX = 920
 KCAL_PER_EV = 23.0605  # kcal/mol in one eV
-GREEN, GREY, LIGHT_GREY, INK = "#76B900", "#6F6F6F", "#B8B8B8", "#1A1A1A"
+GREEN, GREY = "#76B900", "#6F6F6F"
 
 # ---------------------------------------------------------------------------
-# Wording on the views: plain labels "Quantity [unit]" and the words of the
-# plan. None of it is on the board yet; it waits on the educator.
+# Wording on the views: plain labels "Quantity [unit]".
 # ---------------------------------------------------------------------------
 LABELS = {
     "reactions": {"reactant": "reactant", "product": "product", "title": "The two ends of each reaction"},
@@ -404,7 +404,7 @@ def read_neb_log(neb_log) -> dict[int, dict[str, np.ndarray]]:
         reader = csv.DictReader(handle)
         missing = {"step", "group_idx", "status", "fmax"} - set(reader.fieldnames or ())
         if missing:
-            raise ValueError(f"neb_log {path.name} has no column {sorted(missing)[0]}; it is not an NEB diagnostics file")
+            raise ValueError(f"neb_log {path.name} has no column {min(missing)}; it is not an NEB diagnostics file")
         for row in reader:
             entry = table.setdefault(int(float(row["group_idx"])), {"step": [], "fmax": [], "status": []})
             entry["step"].append(int(float(row["step"])))
@@ -641,12 +641,13 @@ def path_column(frame, names=None) -> str | None:
                 return column
         return None
     for column in frame.columns:
-        if any(word in str(column).lower() for word in _PATH_WORDS) and _answers(frame[column].tolist()) is None:
-            if all(isinstance(v, str) for v in frame[column].tolist()):
-                return column
+        values = frame[column].tolist()
+        named = any(word in str(column).lower() for word in _PATH_WORDS)
+        if named and _answers(values) is None and all(isinstance(v, str) for v in values):
+            return column
     # Otherwise the first text column, not yes or no, whose values each fill one block of rows, as a path name
-    # does (validation 26 Nov: a column called "name" passed the check and the view showed one flat list).
-    # A verdict in words ("slope", "saddle point", "slope") breaks into several blocks and is not taken.
+    # does: a column called "name" is read as the path. A verdict in words ("slope", "saddle point", "slope")
+    # breaks into several blocks and is not taken.
     for column in frame.columns:
         values = frame[column].tolist()
         if values and all(isinstance(v, str) for v in values) and _answers(values) is None:
@@ -687,6 +688,8 @@ _UNITS = (
 
 
 def _is_count(frame, column) -> bool:
+    """True for a column of whole numbers whose name says "imag" and names no frequency or wavenumber."""
+
     label = str(column).lower()
     return (
         "imag" in label
@@ -703,8 +706,6 @@ def saddle_header(column, frame=None, verdict=None, image=None) -> str:
     end (``fmax_eV_per_A``, ``lowest_freq_cm1``) goes in brackets. A force
     column with no unit in its name is in eV/Å, the model's unit.
     """
-
-    import re
 
     words = LABELS["saddle"]
     if column == verdict:
@@ -733,10 +734,27 @@ def saddle_header(column, frame=None, verdict=None, image=None) -> str:
 
 
 def _saddle_cell(value) -> str:
+    """One cell of the table as text: one format for every number that is not a whole number, no "-0.0000"."""
+
     if isinstance(value, (float, np.floating)):
         text = LABELS["saddle"]["number"].format(value=float(value))
         return text[1:] if text.startswith("-") and float(text) == 0.0 else text
     return str(value)
+
+
+def _saddle_line(text: str) -> str:
+    """One line of words above or under the table."""
+
+    return f"<p style='margin:4px 0'>{escape(text)}</p>"
+
+
+def _plain_saddle_table(frame, verdict) -> str:
+    """A table with no path column: one list of rows, the verdict first, under a line that says so."""
+
+    order = ([verdict] if verdict is not None else []) + [c for c in frame.columns if c != verdict]
+    headers = [saddle_header(c, frame, verdict) for c in order]
+    table = _html_table(headers, [[_saddle_cell(v) for v in row] for row in frame[order].itertuples(index=False)])
+    return _saddle_line(LABELS["saddle"]["no_path"]) + table
 
 
 def saddle_table_html(saddle_table) -> str:
@@ -750,19 +768,11 @@ def saddle_table_html(saddle_table) -> str:
     frame = saddle_frame(saddle_table)
     column = path_column(frame)
     words = LABELS["saddle"]
-
-    cell = _saddle_cell
-
-    def line(text: str) -> str:
-        return f"<p style='margin:4px 0'>{escape(text)}</p>"
-
+    line = _saddle_line
     found = saddle_answers(frame)
     verdict = found[0] if found is not None else None
     if column is None:
-        order = ([verdict] if verdict is not None else []) + [c for c in frame.columns if c != verdict]
-        headers = [saddle_header(c, frame, verdict) for c in order]
-        table = _html_table(headers, [[cell(v) for v in row] for row in frame[order].itertuples(index=False)])
-        return line(words["no_path"]) + table
+        return _plain_saddle_table(frame, verdict)
     image = image_column(frame, column)
     # the verdict first, so it stays in view on a narrow screen; then the image number and the numbers
     first = [c for c in (verdict, image) if c is not None]
@@ -778,7 +788,9 @@ def saddle_table_html(saddle_table) -> str:
             f"{escape(str(value))}</th></tr>"
         )
         for row in block[others].itertuples(index=False):
-            body.append("<tr>" + "".join(f"<td style='text-align:left'>{escape(cell(v))}</td>" for v in row) + "</tr>")
+            body.append(
+                "<tr>" + "".join(f"<td style='text-align:left'>{escape(_saddle_cell(v))}</td>" for v in row) + "</tr>"
+            )
         if found is not None:
             count = sum(_answers(block[found[0]].tolist()) or [])
             if count == 0:

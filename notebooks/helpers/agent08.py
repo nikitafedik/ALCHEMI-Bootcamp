@@ -31,9 +31,8 @@ __all__ = [
     "REACTIONS",
     "RELAX_FMAX",
     "configure_tutorial",
-    "load_model",
-    "load_model_variant",
     "largest_forces",
+    "load_model",
     "load_reactions",
     "make_work_dir",
     "plot_energy_profiles",
@@ -45,23 +44,31 @@ __all__ = [
     "show_session",
 ]
 
-# The folder of the step files. ALCHEMI_AGENT08_WORK moves it, so that tests and trials do not share one folder.
+# The folder of the step files. ALCHEMI_AGENT08_WORK names another folder.
 WORK_DIR = Path(os.environ.get("ALCHEMI_AGENT08_WORK") or Path(__file__).resolve().parents[1] / "agent08_work")
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "agent08"
 # The saved default ends, two frames per reaction, relaxed with the notebook's model (AIMNet2 + Coulomb).
 REACTIONS_FILE = DATA_DIR / "reactions-v2.extxyz"
 NOTEBOOK = "notebooks/alchemi-agent-08-paths-of-least-resistance.ipynb"
+# The notebook's model is AIMNet2 with its Coulomb term and without D3: Toolkit's
+# model.compute_hessian works on it.
 MODEL_NAME = "aimnet2-wb97m-d3_0"
 COULOMB_CUTOFF = 15.0  # Å
-# The educator's decision of 26 Nov for 08, "exclude D3": the notebook's model is AIMNet2 with its Coulomb
-# term, on which Toolkit's model.compute_hessian works, whatever the environment says. ALCHEMI_AGENT08_D3=1 is
-# read only by load_model_variant, for the tests and comparison runs that build the variant with D3.
 # Largest per-atom force norm, in eV/Å, that the loader accepts on the two ends of a path. It is
 # six times below the NEB stop of neb_settings (0.003) and ten times below the saddle tolerance of
 # the step check (0.005), so an end reads as a stationary point in every later test.
 RELAX_FMAX = 0.0005
 SAVE_FMAX = 0.0002  # eV/Å, the saved ends are relaxed to this, so that they pass RELAX_FMAX on any machine
 RELAX_MAX_STEPS = 3000
+
+# Lines this module can print or raise to the learner.
+MESSAGES = {
+    "ends_not_relaxed": (
+        "the two ends of the paths did not relax: the largest force on an atom is {force:.4f} eV/Å "
+        "after {steps} steps, and the loader asks for {fmax:g} eV/Å"
+    ),
+    "unknown_reaction": "Unknown reaction {name!r}; expected one of {known}",
+}
 
 
 def make_work_dir() -> Path:
@@ -86,7 +93,7 @@ def show_session() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Model: AIMNet2 with its Coulomb term; the variant with D3 under its own call
+# Model: AIMNet2 with its Coulomb term
 # ---------------------------------------------------------------------------
 
 
@@ -113,17 +120,20 @@ def load_model(device, d3: bool = False):
     """Return the model of the notebook, ready for energies and forces.
 
     AIMNet2 with its Coulomb term, as composed in "Made to order", without
-    D3 (the educator's decision for this notebook). One autograd group:
-    AIMNet2 hands its partial charges to the Coulomb term (cutoff 15 Å), and
-    the forces come from the summed energy. Energies in eV, forces in eV/Å.
-    ``model.compute_hessian`` works on this model. It does not read the
-    environment. ``d3=True`` adds the D3(BJ) term as a second group; it has
-    no second derivatives in Toolkit 0.3.0, so ``compute_hessian`` refuses
-    that model.
+    D3. One autograd group: AIMNet2 hands its partial charges to the Coulomb
+    term (cutoff 15 Å), and the forces come from the summed energy. Energies
+    in eV, forces in eV/Å. ``model.compute_hessian`` works on this model.
+    ``d3=True`` adds the D3(BJ) term as a second group; it has no second
+    derivatives in Toolkit 0.3.0, so ``compute_hessian`` refuses that model.
     """
 
     import torch
-    from nvalchemi.models import AIMNet2Wrapper, PipelineGroup, PipelineModelWrapper, PipelineStep
+    from nvalchemi.models import (
+        AIMNet2Wrapper,
+        PipelineGroup,
+        PipelineModelWrapper,
+        PipelineStep,
+    )
 
     device = torch.device(device)
     aimnet = AIMNet2Wrapper.from_checkpoint(MODEL_NAME, device=device).eval()
@@ -151,22 +161,14 @@ def load_model(device, d3: bool = False):
     return model
 
 
-def load_model_variant(device):
-    """The model ``ALCHEMI_AGENT08_D3`` names, for tests and comparison runs, never the notebook.
-
-    ``ALCHEMI_AGENT08_D3=1`` gives AIMNet2 with its Coulomb and D3 terms;
-    unset or any other value gives the notebook's model.
-    """
-
-    return load_model(device, d3=os.environ.get("ALCHEMI_AGENT08_D3", "0") == "1")
-
-
 # ---------------------------------------------------------------------------
 # Reactions: two ends per path, atoms matched by index
 # ---------------------------------------------------------------------------
 
 
 def _rotate_about(points, origin, axis, degrees):
+    """Turn ``points`` by ``degrees`` about the line through ``origin`` along ``axis``."""
+
     axis = axis / np.linalg.norm(axis)
     t = np.deg2rad(degrees)
     v = points - origin
@@ -319,14 +321,17 @@ def _lay_over(p, q):
     return pc @ (u @ np.diag([1.0, 1.0, d]) @ vt) + q.mean(0)
 
 
-# Lines this module can print or raise to the learner. Drafts; they wait on the educator.
-MESSAGES = {
-    "ends_not_relaxed": (
-        "the two ends of the paths did not relax: the largest force on an atom is {force:.4f} eV/Å "
-        "after {steps} steps, and the loader asks for {fmax:g} eV/Å"
-    ),
-    "unknown_reaction": "Unknown reaction {name!r}; expected one of {known}",
-}
+def _bare(atoms) -> Atoms:
+    """A copy with the symbols and positions only, without what the file added."""
+
+    return Atoms(atoms.get_chemical_symbols(), positions=atoms.positions.copy())
+
+
+def _lay_product_over(name: str, reactant, product) -> None:
+    """Lay the product of reaction ``name`` over its reactant, unless it keeps the turn of its builder."""
+
+    if name not in _KEEPS_ITS_TURN:
+        product.positions = _lay_over(product.positions, reactant.positions)
 
 
 def _saved_ends(names: list[str]):
@@ -339,8 +344,7 @@ def _saved_ends(names: list[str]):
     frames = {(a.info.get("reaction"), a.info.get("end")): a for a in read(REACTIONS_FILE, index=":")}
     if any((name, end) not in frames for name in names for end in ("reactant", "product")):
         return None
-    clean = lambda atoms: Atoms(atoms.get_chemical_symbols(), positions=atoms.positions.copy())  # noqa: E731
-    return [clean(frames[(n, "reactant")]) for n in names], [clean(frames[(n, "product")]) for n in names]
+    return [_bare(frames[(n, "reactant")]) for n in names], [_bare(frames[(n, "product")]) for n in names]
 
 
 def _built_ends(names: list[str]):
@@ -377,8 +381,7 @@ def load_reactions(model, names=None):
         relaxed = _relax(model, reactants + products)
         reactants, products = relaxed[: len(names)], relaxed[len(names) :]
     for name, a, b in zip(names, reactants, products):
-        if name not in _KEEPS_ITS_TURN:
-            b.positions = _lay_over(b.positions, a.positions)
+        _lay_product_over(name, a, b)
         a.info["name"] = b.info["name"] = name
     return reactants, products, names
 
@@ -400,8 +403,7 @@ def save_default_reactions(model, path: Path | None = None) -> Path:
     frames = []
     for k, name in enumerate(names):
         a, b = relaxed[k], relaxed[len(names) + k]
-        if name not in _KEEPS_ITS_TURN:
-            b.positions = _lay_over(b.positions, a.positions)
+        _lay_product_over(name, a, b)
         for atoms, end in ((a, "reactant"), (b, "product")):
             atoms.info = {"reaction": name, "end": end}
             frames.append(atoms)

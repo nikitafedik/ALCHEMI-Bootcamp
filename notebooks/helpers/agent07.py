@@ -8,8 +8,7 @@ preparation, the stage settings, the store the refill step
 takes as an input, the result views and the route comparison. The step
 contracts live in ``agent07_check``.
 
-Every line a view prints to the learner is in ``LINES`` below; they are drafts
-until the educator approves them.
+Every line a view prints to the learner is in ``LINES`` below.
 """
 
 from __future__ import annotations
@@ -49,11 +48,10 @@ BATCH_MULTIPLIER = 26  # trajectories per complex (the notebook's value): 3,874 
 MAX_BATCH_SIZE = 1308  # trajectories in the active batch
 MAX_ATOMS = 20000  # atoms in the active batch
 # Complexes below this size are left out of the study: for 4 to 7 atoms the temperature of one
-# trajectory swings too widely for the NVT rule (notes/evidence/agent-07, l06-9-rules).
-# One switch; 0 keeps all 205 complexes.
+# trajectory swings too widely for the NVT rule. One switch; 0 keeps all 205 complexes.
 MIN_ATOMS = 10
 
-# The settings of the two stages. The setup cell of the candidate notebook holds the same line;
+# The settings of the two stages. The setup cell of the notebook holds the same line;
 # `stage_settings()` returns a copy.
 #   temperature, tolerance  NVT ends for a trajectory once its mean temperature over the last
 #                           `window` MD steps is within `tolerance` K of `temperature` K
@@ -64,12 +62,6 @@ STAGE_SETTINGS = dict(
     temperature=300.0, tolerance=60.0, window=100, nvt_steps=600, nve_steps=200, dt=1.0, friction=0.01,
 )
 
-# PROVISIONAL (advisor's recommendation, the educator has not decided): the store for finished
-# trajectories is the course sink below. To switch to a Toolkit sink, change the name in the
-# input row of step 2 and drop `CudaCompletionSink` from `__all__`; the views and the check read
-# any sink with `read()` or a list of batches.
-COMPLETION_STORE = "course sink"
-
 # Which pair of stages a trace describes, by the name the notebook gives it, and the word for
 # the steps of its first stage.
 TRACE_STAGES = {
@@ -77,7 +69,7 @@ TRACE_STAGES = {
     "relax_md_trace": ("relaxation", "MD", "steps"),
 }
 
-# Every line and column name a view shows the learner (drafts).
+# Every line and column name a view shows the learner.
 LINES = {
     "session": (
         "Give these to your agent when you start the session:\n"
@@ -176,8 +168,7 @@ class CudaCompletionSink(_m3.CudaCompletionSink):
     """
 
     def __init__(self, capacity: int, device: torch.device | str | None = None) -> None:
-        # device defaults to the GPU when there is one (all three refill trials of 26 Nov first
-        # called the store with the capacity alone)
+        # The device defaults to the GPU when there is one, so the capacity alone makes a store.
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self._capacity = int(capacity)
@@ -218,7 +209,7 @@ class CudaCompletionSink(_m3.CudaCompletionSink):
 
 
 class _Table(pd.DataFrame):
-    """A DataFrame that shows without its 0, 1, 2 index column (render check of 27 Nov)."""
+    """A DataFrame that shows without its 0, 1, 2 index column."""
 
     @property
     def _constructor(self):
@@ -229,10 +220,6 @@ class _Table(pd.DataFrame):
 
     def __repr__(self) -> str:
         return self.to_string(index=False)
-
-
-def _array(values) -> torch.Tensor:
-    return torch.as_tensor(values).detach().cpu()
 
 
 def _batches(result) -> list:
@@ -246,6 +233,8 @@ def _batches(result) -> list:
 
 
 def _ids(result) -> torch.Tensor:
+    """The ``simulation_id`` of every finished trajectory of a route, on the host."""
+
     batches = _batches(result)
     for batch in batches:
         if not hasattr(batch, "simulation_id"):
@@ -285,7 +274,7 @@ def show_stage_changes(stage_trace, stages: tuple[str, ...] | None = None) -> No
     if stages is None:
         stages = TRACE_STAGES.get(_notebook_name(stage_trace), ("first stage", "second stage"))
     stages = (*stages, "steps")[:3]
-    trace = _array(stage_trace)
+    trace = torch.as_tensor(stage_trace).detach().cpu()
     if trace.ndim != 2 or trace.shape[1] != 2:
         raise ValueError(
             "stage_trace must have one row per trajectory and two columns, "

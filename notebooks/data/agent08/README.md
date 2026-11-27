@@ -33,10 +33,8 @@ agent08.save_default_reactions(model)              # relaxes all ends to 0.0002 
 ```
 
 Built on 2026-11-26, CPU, nvalchemi-toolkit 0.3.0, with the notebook's model:
-AIMNet2 with its Coulomb term, no D3 (the educator's decision for 08, "exclude
-D3"). The ends of the earlier file, relaxed with D3 in the model and retired on
-27 Nov, carry up to 0.020 eV/Å with this model; the new ends moved by at most
-0.004 Å.
+AIMNet2 with its Coulomb term, no D3. Ends relaxed with D3 in the model carry
+up to 0.020 eV/Å with this model and lie at most 0.004 Å from the saved ones.
 
 ## Verification
 
@@ -51,8 +49,4 @@ D3"). The ends of the earlier file, relaxed with D3 in the model and retired on
   `model.compute_hessian`, and a force at or below 0.0016 eV/Å. The three
   step checks pass with the sample files (paths, neb, saddle).
 - Model fit: the reactions are small neutral molecules of H, C, N, O, the
-  domain of AIMNet2; the model is AIMNet2 with its Coulomb term, D3 left out
-  by the educator's decision for this notebook.
-- Records: `notes/evidence/agent-08/` (owner files of 2026-11-26: l08-ends,
-  l08-settings, l08-model-d3, l08-check-samples; the run with the model
-  without D3: `revision/nod3/`).
+  domain of AIMNet2; the model is AIMNet2 with its Coulomb term, without D3.

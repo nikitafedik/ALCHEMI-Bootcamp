@@ -6,10 +6,10 @@ and more (149 of the 205, `MIN_ATOMS` in `helpers/agent07.py`) at their
 published equilibrium geometries, `batch_multiplier` trajectories of each.
 `helpers.agent07.prepare_study(device, batch_multiplier=26)` returns them as
 `trajectories` (3,874 trajectories, 59,202 atoms, 10 to 33 atoms each, each
-complex 26 times with its own velocity draw) with the composed model (counted
-by a run on 26 Nov 2026 with Toolkit 0.3.0 at 77d3c9e:
-`notes/evidence/agent-07/rework-20261126/gpu/logs/routes.jsonl`, setup line). The small study of the step check (`batch_multiplier=0.1`) keeps 17
-trajectories.
+complex 26 times with its own velocity draw) with the composed model. The
+counts follow from `study_complexes.csv` and were confirmed by a run with
+Toolkit 0.3.0. The small study of the step check (`batch_multiplier=0.1`)
+keeps 17 trajectories.
 
 `study_complexes.csv` lists all 205 complexes of the set, in the order of the
 set; the study keeps the rows with `natoms` of 10 and more, in this order (each
@@ -40,6 +40,4 @@ downloads nothing.
 
 The composed model of the notebook is AIMNet2 with its Coulomb and D3 terms,
 the course's model for neutral organic molecules. Every complex is neutral and
-made of the elements the set was built for (see the papers above). The
-verification record is in
-`notes/evidence/agent-07/` (file `l06-defaults--...--owner.md`).
+made of the elements the set was built for (see the papers above).

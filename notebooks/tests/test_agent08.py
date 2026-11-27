@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,10 +29,7 @@ sys.path.insert(0, str(_NOTEBOOK_DIR))
 import IPython.display as ipy_display
 from helpers import agent08, agent08_check, agent08_views
 
-LIVE_NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-08-paths-of-least-resistance.ipynb"
-# The notebook tests read the file named by A08_NOTEBOOK (the candidate notebook of plan 3.1) when
-# it is set, otherwise the live notebook.
-NOTEBOOK = Path(os.environ.get("A08_NOTEBOOK") or LIVE_NOTEBOOK)
+NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-08-paths-of-least-resistance.ipynb"
 NAMES = ["ammonia inversion", "ethane rotation", "HCN to HNC", "malonaldehyde proton transfer"]
 
 
@@ -51,13 +49,7 @@ def shown(monkeypatch):
 
 
 def _cells() -> list[dict]:
-    cells = json.loads(NOTEBOOK.read_text())["cells"]
-    if not any("neb_settings" in "".join(c["source"]) for c in cells):
-        pytest.skip(
-            f"{NOTEBOOK.name} has no neb_settings yet: it waits for the board text of plan 3.1. "
-            "Run with A08_NOTEBOOK=<candidate notebook> to test the cells the helpers are built for"
-        )
-    return cells
+    return json.loads(NOTEBOOK.read_text())["cells"]
 
 
 def _text(cell: dict) -> str:
@@ -115,7 +107,7 @@ def test_view_calls_take_the_names_their_step_returns():
 def test_cells_have_ids_and_no_saved_outputs():
     cells = _cells()
     ids = [c["id"] for c in cells]
-    # numbered cells as on the board; the top animation and the roadmap strip carry ids of their own
+    # numbered cells; the top animation and the roadmap strip carry ids of their own
     assert all(re.fullmatch(r"a08-(\d\d|top|strip)", i) for i in ids)
     numbered = [i for i in ids if i[4:].isdigit()]
     assert numbered == sorted(numbered) and len(set(ids)) == len(ids)
@@ -258,15 +250,12 @@ def _needs_aimnet2() -> None:
 
 
 def test_the_model_without_d3_is_the_default():
-    """The educator's decision of 26 Nov for 08, "exclude D3": AIMNet2 with Coulomb, whatever the environment says.
-    Fix pass 27 Nov: only load_model_variant reads ALCHEMI_AGENT08_D3."""
+    """The notebook's model is AIMNet2 with its Coulomb term, without D3, whatever the environment says."""
 
     import inspect
 
     assert inspect.signature(agent08.load_model).parameters["d3"].default is False
     assert "os.environ" not in inspect.getsource(agent08.load_model)
-    assert "ALCHEMI_AGENT08_D3" in inspect.getsource(agent08.load_model_variant)
-    assert not hasattr(agent08, "WITH_D3")
     assert "AIMNet2 with its Coulomb term" in agent08.load_model.__doc__
     assert agent08.REACTIONS_FILE.name == "reactions-v2.extxyz"
 
@@ -288,10 +277,8 @@ def test_the_shipping_model_reads_the_saved_ends_and_gives_a_dense_hessian():
     assert bool(torch.isfinite(hessian).all())
 
 
-def _setup_in_a_fresh_interpreter(env: dict) -> "subprocess.CompletedProcess":
+def _setup_in_a_fresh_interpreter() -> subprocess.CompletedProcess:
     """The setup cell's model and loader in a new Python, from notebooks/, as the kernel runs them."""
-
-    import subprocess
 
     code = (
         "from helpers import agent08 as helpers\n"
@@ -301,16 +288,18 @@ def _setup_in_a_fresh_interpreter(env: dict) -> "subprocess.CompletedProcess":
         "print('groups', len(model.groups))\n"
     )
     full = {k: v for k, v in os.environ.items() if not k.startswith("ALCHEMI_AGENT08")}
-    full.update(env, CUDA_VISIBLE_DEVICES="")
-    return subprocess.run([sys.executable, "-c", code], cwd=_NOTEBOOK_DIR, env=full, capture_output=True, text=True, timeout=600)
+    full.update(CUDA_VISIBLE_DEVICES="")
+    return subprocess.run(
+        [sys.executable, "-c", code], cwd=_NOTEBOOK_DIR, env=full, capture_output=True, text=True, timeout=600, check=False
+    )
 
 
-def test_the_setup_model_ignores_the_d3_variable_and_prints_no_aimnet2_warning():
-    """Fix pass 27 Nov: the lesson's model is one group (AIMNet2 + Coulomb) with ALCHEMI_AGENT08_D3=1 set, and the
-    Toolkit aimnet2.py "Converting a tensor with requires_grad=True to a scalar" warning does not reach stderr."""
+def test_the_setup_model_is_one_group_and_prints_no_aimnet2_warning():
+    """The notebook's model is one group (AIMNet2 + Coulomb), and the Toolkit aimnet2.py warning
+    "Converting a tensor with requires_grad=True to a scalar" does not reach stderr."""
 
     _needs_aimnet2()
-    done = _setup_in_a_fresh_interpreter({"ALCHEMI_AGENT08_D3": "1"})
+    done = _setup_in_a_fresh_interpreter()
     assert done.returncode == 0, done.stderr[-2000:]
     assert "groups 1" in done.stdout
     assert "Converting a tensor with requires_grad=True to a scalar" not in done.stderr
@@ -326,17 +315,8 @@ def test_configure_tutorial_installs_the_aimnet2_warning_filter():
         assert hits and hits[0][3] is not None and hits[0][3].match("nvalchemi.models.aimnet2")
 
 
-def test_the_variant_call_reads_the_d3_variable(monkeypatch):
-    seen = []
-    monkeypatch.setattr(agent08, "load_model", lambda device, d3=False: seen.append(d3))
-    for value, want in (("1", True), ("0", False)):
-        monkeypatch.setenv("ALCHEMI_AGENT08_D3", value)
-        agent08.load_model_variant("cpu")
-        assert seen[-1] is want
-
-
 def test_the_d3_variant_refuses_a_dense_hessian():
-    """With the switch on, compute_hessian refuses the D3 term (no second derivatives in Toolkit 0.3.0)."""
+    """With ``d3=True``, compute_hessian refuses the D3 term (no second derivatives in Toolkit 0.3.0)."""
 
     _needs_aimnet2()
     from helpers.model_support import d3_parameter_file, prepare_model_batch
@@ -572,7 +552,7 @@ def test_saddle_table_is_shown_as_it_is_grouped_by_path():
     assert markup.count("colspan='3'") == 2 and "b &lt;c&gt;" in markup
     assert "0.0017" in markup and markup.count("<td style='text-align:left'>yes</td>") == 1
     heads = re.findall(r"<th style='text-align:left'>([^<]*)</th>", markup.split("<tbody>")[0])
-    assert heads == ["Saddle point", "Image", "Largest force [eV/Å]"]  # fix pass 27 Nov: the verdict first
+    assert heads == ["Saddle point", "Image", "Largest force [eV/Å]"]  # the verdict first
     assert "unexpected: no image of b &lt;c&gt; is a saddle point in this table" in markup
     assert "unexpected: no image of a " not in markup
     rows = [{"n": 1, "saddle": "no"}, {"n": 2, "saddle": "yes"}]  # no path column: one plain table and a line
@@ -581,7 +561,7 @@ def test_saddle_table_is_shown_as_it_is_grouped_by_path():
 
 
 def test_saddle_view_headers_have_units_and_one_number_format():
-    """Fix pass 27 Nov: readable headers with units, one number format, the verdict first (visible at 920 px)."""
+    """Readable headers with units, one number format, the verdict first (visible at 920 px)."""
 
     pd = pytest.importorskip("pandas")
     sample = pd.DataFrame({
@@ -882,7 +862,7 @@ def test_converged_uses_the_threshold_of_a_convergence_hook(fake_batches, tmp_pa
 
 
 def test_a_stop_rule_the_check_cannot_read_fails_with_one_line(fake_batches, tmp_path):
-    """Closes n08q-convhook: a wrong converged can no longer pass unseen behind a hook the log cannot be compared with."""
+    """A wrong converged cannot pass unseen behind a hook the log cannot be compared with."""
 
     for neb in (_hook_neb(_criterion(0.1), _criterion(1e-6, key="energy_change")), _hook_neb(_criterion(0.1, reduce_op="max"))):
         assert agent08_check._run_threshold(neb) is None
@@ -962,8 +942,8 @@ def test_a_yes_is_held_to_a_force_limit_of_its_own(fake_batches):
 
 
 def test_a_yes_must_be_a_top_of_its_path_with_forces_near_zero(fake_batches):
-    """Validation 26 Nov, point 5: a force-only verdict passed with a yes on HCN images that sit in the minima.
-    The approved Hint asks for both tests; the path holds the curvature: a saddle is higher than both neighbours."""
+    """A force-only verdict gives a yes to images that sit in the minima. The step asks for both tests;
+    the path holds the curvature: a saddle is higher than both neighbours."""
 
     ns = _saddle_ns(_TOPS)
     flat = ns["model"]
@@ -1027,7 +1007,7 @@ def _recount_ns(counts, freqs, monkeypatch):
 
 
 def test_the_check_recounts_the_imaginary_modes_of_every_image(fake_batches, monkeypatch):
-    """Fix pass 27 Nov: a passing trial table gave 3 imaginary modes where the projected Hessian gives 1."""
+    """A table that gives 3 imaginary modes where the projected Hessian gives 1 is told so."""
 
     one, none = np.array([-500.0, 300.0]), np.array([200.0, 300.0])
     freqs = [none, none, one, one, none] * 2
@@ -1061,7 +1041,7 @@ NO_COUNT = (
 
 
 def test_a_table_without_a_count_of_imaginary_modes_fails_with_one_line(fake_batches):
-    """Judge Astra, 26 Nov: a table with no count column must not skip the curvature test."""
+    """A table with no count column must not skip the curvature test."""
 
     assert agent08_check._check_saddle(_saddle_ns(_TOPS, n_imaginary=None), {})[0] == [NO_COUNT]
     as_float = agent08_check._check_saddle(_saddle_ns(_TOPS, n_imaginary=[0.0, 0.0, 1.0, 0.0, 0.0] * 2), {})[0]
@@ -1088,7 +1068,7 @@ def test_saddle_messages(fake_batches):
 
 
 def test_the_table_must_name_the_path_and_the_image_of_every_row(fake_batches):
-    """Cold-read finding n08r-1: "Read one path from end to end" needs both columns."""
+    """"Read one path from end to end" needs both columns."""
 
     def lines(**columns):
         return agent08_check._check_saddle(_saddle_ns(_TOPS, **columns), {})[0]
@@ -1225,7 +1205,7 @@ def test_check_accepts_names_paths_and_numbers():
 
 
 def test_every_printed_line_is_in_one_place():
-    """The lines a learner can see are drafts for the educator: LINES in the check, LABELS in the views, MESSAGES in the helper."""
+    """The lines a learner can see: LINES in the check, LABELS in the views, MESSAGES in the helper."""
 
     source = (Path(agent08_check.__file__)).read_text()
     body = source[source.index("# Small tools") :]
@@ -1249,7 +1229,7 @@ def test_neb_watch_counts_runs_and_puts_the_class_back():
 
 
 def test_a_setup_cell_that_fails_is_one_line(monkeypatch, capsys):
-    """Validation 26 Nov, point 2: a missing D3 parameter file printed a full traceback."""
+    """A setup cell that fails gives one line, with no traceback."""
 
     monkeypatch.setattr(agent08_check, "SETUP_CELL", "raise RuntimeError('D3 parameter file is missing: /x/dftd3_parameters.pt')")
     assert agent08_check.main(["agent08", "check", "paths"]) == 1

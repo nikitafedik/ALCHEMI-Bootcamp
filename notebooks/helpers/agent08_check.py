@@ -20,10 +20,10 @@ units and order. Every line the check can print is in ``LINES``.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import time
-import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,7 +31,7 @@ import numpy as np
 
 from . import agent08_views as views
 
-# The setup cell of the notebook (board cell n08-v2-5), run before every step file.
+# The setup cell of the notebook, run before every step file.
 NEB_SETTINGS_LINE = (
     "neb_settings = dict(num_images=8, fmax=0.003, regular_fmax=0.03, n_steps=600)"
     "  # images per path, both ends; eV/Å; eV/Å; steps"
@@ -58,63 +58,34 @@ ENERGY_TOLERANCE = 5.0e-3  # eV, a learner's energy against a fresh model call
 SADDLE_FORCE_TOLERANCE = 5.0e-3
 # cm^-1. The check recounts the imaginary modes of every image from the model's projected Hessian. A mode below
 # -50 counts as imaginary; one between -50 and -10 may be counted either way, so a table's own cutoff in that band
-# passes. With the notebook's model every vibrational mode of the 32 images is at least 105 cm^-1 from zero
-# (fix pass 27 Nov, notes/evidence/agent-08/fixpass-20261127/spectrum/), so the count does not depend on the cutoff.
+# passes. With the notebook's model every vibrational mode of the 32 images is at least 105 cm^-1 from zero,
+# so the count does not depend on the cutoff.
 IMAGINARY_SURE, IMAGINARY_MAYBE = 50.0, 10.0
 KCAL_PER_EV = views.KCAL_PER_EV
 
 
 @dataclass(frozen=True)
 class Step:
+    """One step of the notebook: its file, the names the file leaves, and the steps whose files run first."""
+
     file: str
     names: tuple[str, ...]
     after: tuple[str, ...] = ()
-    contract: str = ""  # the contract in words, for the solutions note and the tests
-    done_when: str = ""  # what "Done when" promises and the check verifies
 
 
+# The contract of each step is in its `_check_*` function below and, in words, in solutions/agent-08/solutions.md.
 STEPS: dict[str, Step] = {
-    "paths": Step(
-        "paths.py",
-        ("paths",),
-        contract=(
-            "one Batch, one group of images per reaction, neb_settings['num_images'] images per "
-            "path, the ends as the loader gave them; energy, forces and velocities attached"
-        ),
-    ),
+    "paths": Step("paths.py", ("paths",)),
     "neb": Step(
-        "neb.py",
-        ("relaxed_paths", "neb_log", "path_energy", "barriers", "converged"),
-        after=("paths",),
-        contract=(
-            "relaxed_paths: every path in one Batch, from one NEB call with a climbing image; "
-            "neb_log: the diagnostics CSV of that run; the file can be run again; path_energy: "
-            "one value per image in eV, in the order of relaxed_paths; barriers: one forward "
-            "barrier per path in eV; converged: one true or false per path, the path's last "
-            "force in the log against the stopping force of the run"
-        ),
-        done_when="a barrier and a converged yes or no for every path",
+        "neb.py", ("relaxed_paths", "neb_log", "path_energy", "barriers", "converged"), after=("paths",)
     ),
-    "saddle": Step(
-        "saddle.py",
-        ("saddle_table",),
-        after=("paths", "neb"),
-        contract=(
-            "saddle_table: one row per image of relaxed_paths, with a column that names the path, "
-            "a column with the image number, a column of whole numbers that counts the imaginary modes, "
-            "a yes or no and the numbers behind it; no end of a path is a saddle point; a yes only where "
-            "the largest force on an atom is at or below 0.005 eV/Å, the image is a top of its path and "
-            "the table counts exactly one imaginary mode; the count of every image agrees with the model's Hessian "
-            "once the rigid translations and rotations are projected out"
-        ),
-        done_when="every image of every path with a yes or no and the numbers behind it",
-    ),
+    "saddle": Step("saddle.py", ("saddle_table",), after=("paths", "neb")),
 }
-ALIASES = {"barriers": "neb"}
+ALIASES = {"barriers": "neb"}  # the barriers are read in the step neb; the check takes this name for it
 # Names a script has and a notebook cell does not; a file that uses one is told to drop that line.
-NOT_IN_A_CELL = frozenset({"__file__"})  # the old step "read the barriers" is part of the merged step
+NOT_IN_A_CELL = frozenset({"__file__"})
 
-# Every line the check prints to the learner. Drafts; they wait on the educator.
+# Every line the check prints to the learner.
 LINES = {
     # common
     "setup_failed": "the notebook's setup cell failed: {error}",
@@ -240,8 +211,7 @@ LINES = {
 # ---------------------------------------------------------------------------
 
 
-def _array(values) -> np.ndarray:
-    return views._array(values)
+_array = views._array
 
 
 def _type(value) -> str:
@@ -542,8 +512,8 @@ def _check_neb(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
     if isinstance(first, list) and max(r["stop_step"] for r in first) > 0 and max(r["stop_step"] for r in rows) == 0:
         problems.append(LINES["second_run"])
         rows = first
-        # converged now comes from the second run, which started from finished paths; comparing it with the
-        # first run's log printed four false "converged is False" lines (validation 26 Nov, three of three trials).
+        # converged now comes from the second run, which started from finished paths, so it is not
+        # compared with the log of the first run.
         rerun_broken = True
     if not problems and ctx.get("start") is not None:
         moved = max(float(np.abs(a - b).max()) for a, b in zip(_images(relaxed), ctx["start"]))
@@ -628,12 +598,7 @@ def imaginary_count_column(frame) -> str | None:
     frequency or wavenumber (``n_imaginary``, ``imaginary modes``, ``n_imag``).
     """
 
-    for column in frame.columns:
-        label = str(column).lower()
-        if "imag" in label and not any(w in label for w in ("image", "freq", "cm", "wave", "lowest", "value")):
-            if frame[column].dtype.kind in "iu":
-                return column
-    return None
+    return next((column for column in frame.columns if views._is_count(frame, column)), None)
 
 
 def _check_saddle(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
@@ -649,8 +614,8 @@ def _check_saddle(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
     found = saddle_answers(frame)
     if found is None:
         return [LINES["table_no_answer"]], []
-    column, answers = found
-    rows, problem, path_col, image_col = _image_rows(frame, names, groups)
+    answers = found[1]
+    rows, problem, _, image_col = _image_rows(frame, names, groups)
     numbers = [c for c in frame.columns if frame[c].dtype.kind in "fiu" and c != image_col]
     if not numbers:
         problems.append(LINES["table_no_numbers"])
@@ -659,7 +624,7 @@ def _check_saddle(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
     energy, forces = _fresh_call(ns["model"], relaxed)
     largest = [float(np.linalg.norm(f, axis=1).max()) for f in forces]
     count_col = imaginary_count_column(frame)
-    if count_col is None:  # judge Astra, 26 Nov: without the count a table would skip the curvature test
+    if count_col is None:  # without the count a table would skip the curvature test
         problems.append(LINES["table_no_count"])
     images, notes, first = _images(relaxed), [], 0
     for name, count in zip(names, groups):
@@ -671,9 +636,9 @@ def _check_saddle(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
             i = first + k
             if not answers[rows[i]]:
                 continue
-            # The approved Hint: forces near zero AND exactly one imaginary frequency. The force is measured
+            # A saddle point has forces near zero and exactly one imaginary frequency. The force is measured
             # here; the curvature is held by the path (a saddle on a path is higher than both neighbours) and by
-            # the table's own count of imaginary modes, where it has one (validation 26 Nov, point 5).
+            # the table's own count of imaginary modes.
             if largest[i] > SADDLE_FORCE_TOLERANCE:
                 problems.append(
                     LINES["yes_above_tolerance"].format(name=name, image=k, force=largest[i], tol=SADDLE_FORCE_TOLERANCE)
@@ -694,7 +659,6 @@ def _check_saddle(ns: dict, ctx: dict) -> tuple[list[str], list[str]]:
         first += count
     if count_col is not None:
         problems += _recount(ns["model"], relaxed, frame, rows, count_col, names, groups, notes)
-    ctx["answer_column"] = column
     return problems, notes
 
 
@@ -733,21 +697,18 @@ def _run_file(path: Path, ns: dict) -> Exception | None:
     """Run one step file in the notebook's namespace; its prints go to stderr."""
 
     started = time.time()
-    real_out, sys.stdout = sys.stdout, sys.stderr  # the file's prints must not mix with the verdict
     try:
-        exec(compile(path.read_text(), str(path), "exec"), ns)
+        with contextlib.redirect_stdout(sys.stderr):  # the file's prints must not mix with the verdict
+            exec(compile(path.read_text(), str(path), "exec"), ns)
     except Exception as exc:  # reported to the learner as one line
-        sys.stdout = real_out
-        if os.environ.get("A08_TRACE"):
-            traceback.print_exc()
         return exc
-    finally:
-        sys.stdout = real_out
     print(f"  ({path.name} ran in {time.time() - started:.1f} s)", file=sys.stderr, flush=True)
     return None
 
 
 def _first_line(exc: Exception) -> str:
+    """The type of an exception and the first line of its message."""
+
     text = str(exc).splitlines()[0][:200] if str(exc) else ""
     return f"{type(exc).__name__}: {text}".rstrip(": ")
 
@@ -766,15 +727,11 @@ def check_step(step: str) -> tuple[list[str], list[str]]:
 
     spec = STEPS[step]
     ns: dict = {"__name__": "__main__"}
-    real_out, sys.stdout = sys.stdout, sys.stderr
     try:
-        exec(SETUP_CELL, ns)
+        with contextlib.redirect_stdout(sys.stderr):
+            exec(SETUP_CELL, ns)
     except Exception as exc:  # for example a model checkpoint that fails to load: one line, not a traceback
-        if os.environ.get("A08_TRACE"):
-            traceback.print_exc()
         return [f"{step}: " + LINES["setup_failed"].format(error=_first_line(exc))], []
-    finally:
-        sys.stdout = real_out
     work = Path(ns["work_dir"])
     ctx: dict = {}
     with _WatchNEB() as watch:
@@ -813,6 +770,8 @@ def check_step(step: str) -> tuple[list[str], list[str]]:
 
 
 def main(argv: list[str]) -> int:
+    """Entry point of ``python -m helpers.agent08 check <step>``; ``argv`` starts with the program name."""
+
     step = resolve_step(argv[2]) if len(argv) == 3 and argv[1] == "check" else None
     if step not in STEPS:
         print(LINES["usage"].format(steps="|".join(STEPS)), file=sys.stderr)

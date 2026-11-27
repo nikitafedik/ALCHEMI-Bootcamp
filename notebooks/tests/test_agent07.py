@@ -10,7 +10,6 @@ that call their hooks the way a Toolkit stage does.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -24,9 +23,7 @@ sys.path.insert(0, str(_NOTEBOOK_DIR))
 
 from helpers import agent07, agent07_check
 
-LIVE_NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-07-one-out-one-in.ipynb"
-# A07_NOTEBOOK names another notebook to test (the candidate notebook of plan 3.1).
-NOTEBOOK = Path(os.environ.get("A07_NOTEBOOK") or LIVE_NOTEBOOK)
+NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-07-one-out-one-in.ipynb"
 
 
 # ---------------------------------------------------------------------------
@@ -75,11 +72,6 @@ def test_setup_cell_and_check_agree():
     for name in ("batch_multiplier", "max_batch_size", "max_atoms"):
         value = re.search(rf"^{name} = (\S+)", setup, flags=re.M).group(1)
         assert re.search(rf"^{name} = {re.escape(value)}$", check, flags=re.M), name
-    if "stage_settings" not in setup:
-        pytest.skip(
-            f"{NOTEBOOK.name} has no stage_settings line yet: it waits for the educator. "
-            "Run with A07_NOTEBOOK=<candidate notebook> to test the cell the helpers are built for"
-        )
     ns: dict = {}
     exec(re.search(r"^stage_settings = .*$", setup, flags=re.M).group(0), ns)
     assert ns["stage_settings"] == agent07.STAGE_SETTINGS == agent07.stage_settings()
@@ -222,7 +214,7 @@ def test_compare_routes(capsys):
 
 
 def test_tables_show_without_the_index_column():
-    """Render check of 27 Nov: the views' tables had a bold 0, 1, 2 index column."""
+    """The tables of the views show without a 0, 1, 2 index column."""
 
     tables = [
         agent07.show_refill(_Store(range(3), 1), [None] * 3),
@@ -454,8 +446,7 @@ def test_fused_batches_as_a_count(tmp_path):
 
 
 def test_a_store_whose_read_stops(tmp_path):
-    """Validation of 26 Nov: Toolkit's HostMemory.read() stopped on a size mismatch, and the
-    check said "got HostMemory" as if it were no store at all."""
+    """A store whose read() stops is reported as a store, with the error of its read()."""
 
     broken = RELAX_MD + (
         "\nclass Store:\n"
@@ -489,9 +480,8 @@ def test_trace_shape_and_order(tmp_path):
 
 
 def test_a_stage_left_before_its_window(tmp_path):
-    """A rule on one step's temperature lets a trajectory leave NVT before `window` steps
-    (validation of 26 Nov: the owner's first fused trial switched one trajectory after 8 MD
-    steps with window 50). A mean over the window cannot pass that soon."""
+    """A rule on one step's temperature lets a trajectory leave NVT before `window` steps.
+    A mean over the window cannot pass that soon."""
 
     _one(tmp_path, "fused", {"fused": FUSED + "\nstage_trace[3] = torch.tensor([8, 208])\n"},
          "1 of 12 trajectories left NVT after fewer than `window` = 100 MD steps in it (row 3: 8)")
@@ -501,8 +491,8 @@ def test_a_stage_left_before_its_window(tmp_path):
 
 
 def test_nve_runs_its_fixed_length(tmp_path):
-    """NVE has no stopping rule: every trajectory runs `nve_steps` MD steps in it (decision of
-    26 Nov, "Fixed NVE length"). One step of slack either way for traces that count from 0."""
+    """NVE has no stopping rule: every trajectory runs `nve_steps` MD steps in it. One step of
+    slack either way for traces that count from 0."""
 
     _one(tmp_path, "fused", {"fused": FUSED + "\nstage_trace[0, 1] = stage_trace[0, 0] + 20\n"},
          "1 of 12 trajectories ran NVE for other than `nve_steps` = 200 MD steps (row 0: 20)")
@@ -598,7 +588,7 @@ def test_fixed_nve_length_is_not_unexpected(tmp_path, monkeypatch):
 
 
 def test_check_follows_the_study_size(tmp_path):
-    """Nothing in the check is fixed to 410, 64 or 834."""
+    """Nothing in the check is fixed to one study size or capacity."""
 
     for total, cap in ((5, 2), (30, 7)):
         for step in GOOD:

@@ -1,8 +1,8 @@
 # Agent 07, "One out, one in": default prompts
 
 The typical learner prompt of each step, written from the step's text, its
-table and its Hints alone (fix pass of 27 Nov 2026). A learner writes their
-own; nothing here is printed in the notebook.
+table and its Hints alone. A learner writes their own; nothing here is
+printed in the notebook.
 
 ## Example: fuse NVT and NVE (`fused.py`)
 

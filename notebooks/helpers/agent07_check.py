@@ -32,8 +32,8 @@ steps every trajectory takes in each stage. A staged run written with plain
 engines therefore passes without a ``status`` column.
 
 The study size follows the names of the setup cell. ``ALCHEMI_AGENT07_SMALL=1``
-runs the check on a small study (for a CPU); ``ALCHEMI_AGENT07_WORK`` names
-another folder for the files. Every line the check prints is in ``LINES``.
+runs the check on a small study (for a CPU). Every line the check prints is in
+``LINES``.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ _SETUP = (
 # Names a script has but a notebook cell does not (a %load cell runs without them).
 NOT_IN_A_CELL = ("__file__",)
 
-# Every line the check prints (drafts until the educator approves them).
+# Every line the check prints.
 LINES = {
     "usage": "usage: python -m helpers.agent07 check <step>\nsteps: {steps}",
     "ok": "{step}: OK",
@@ -106,7 +106,7 @@ LINES = {
         "{name} is a store ({got}), but its read() stops with {error}; keep the finished "
         "trajectories in a store whose read() returns them as one Batch, or as a list of Batch"
     ),
-    "not_once":"{name} holds {count} trajectories, {distinct} distinct; expected {total}, each once",
+    "not_once": "{name} holds {count} trajectories, {distinct} distinct; expected {total}, each once",
     "over_capacity": (
         "{name}: one batch holds {graphs} trajectories and {atoms} atoms; the capacity is "
         "max_batch_size = {max_batch_size} and max_atoms = {max_atoms}, and every route runs at it"
@@ -237,6 +237,8 @@ def _watched(build: Callable, watch: _Watch) -> Callable:
 
 
 def _fingerprint(trajectories) -> list[torch.Tensor]:
+    """Copies of the positions, velocities and status of every trajectory."""
+
     out = []
     for item in trajectories:
         for name in ("positions", "velocities", "status"):
@@ -286,6 +288,8 @@ def _finished(ns: dict, name: str, *, capacity: bool) -> list[str]:
 
 
 def _seconds(ns: dict, name: str) -> list[str]:
+    """``name`` is a run time: a finite number above 0."""
+
     value = ns[name]
     try:
         number = float(value)
@@ -297,6 +301,8 @@ def _seconds(ns: dict, name: str) -> list[str]:
 
 
 def _trace(ns: dict, name: str) -> tuple[list[str], list[str]]:
+    """The shape and the order of a trace as problems; switches all at one step as a note."""
+
     total = len(ns["trajectories"])
     try:
         trace = torch.as_tensor(ns[name]).detach().cpu()
@@ -340,11 +346,10 @@ def _cap_notes(ns: dict, first_steps: torch.Tensor) -> list[str]:
     return []
 
 
-def _check_fused(ns: dict, watch: _Watch | None) -> tuple[list[str], list[str]]:
-    del watch
-    problems = _finished(ns, "fused_batches", capacity=True) + _seconds(ns, "fused_seconds")
-    trace_problems, notes = _trace(ns, "stage_trace")
-    problems += trace_problems
+def _stage_pair(ns: dict) -> tuple[list[str], list[str]]:
+    """``build_stages()`` returns a pair of stages; a step cap or a length off ``stage_settings`` is a note."""
+
+    notes: list[str] = []
     try:
         pair = ns["build_stages"]()
         if len(pair) != 2 or not all(callable(getattr(s, "run", None)) for s in pair):
@@ -360,22 +365,16 @@ def _check_fused(ns: dict, watch: _Watch | None) -> tuple[list[str], list[str]]:
             if "nve_steps" in settings and got != settings["nve_steps"]:
                 notes.append(LINES["note_length_differs"].format(got=got, want=settings["nve_steps"]))
     except Exception as error:
-        problems.append(LINES["pair"].format(got=str(error).splitlines()[0][:120]))
-    if not trace_problems:
-        trace = torch.as_tensor(ns["stage_trace"]).long()
-        problems += _early(ns, "stage_trace", trace[:, 0])
-        problems += _nve_length(ns, "stage_trace", trace[:, 1] - trace[:, 0])
-        notes += _cap_notes(ns, trace[:, 0])
-    return problems, notes
+        return [LINES["pair"].format(got=str(error).splitlines()[0][:120])], notes
+    return [], notes
 
 
 def _early(ns: dict, name: str, first_steps: torch.Tensor) -> list[str]:
     """NVT left before its rule had `window` MD steps to average over.
 
     A rule over the last `window` MD steps cannot pass sooner. One step of slack
-    allows for traces that count from 0. A rule on a single step's temperature
-    (the fluctuation-driven exit the settings remove) is caught when a
-    trajectory leaves NVT this early.
+    allows for traces that count from 0. A rule on the temperature of a single
+    step lets a trajectory leave NVT this early, and is caught here.
     """
 
     settings = ns.get("stage_settings")
@@ -413,6 +412,21 @@ def _nve_length(ns: dict, name: str, second_steps: torch.Tensor) -> list[str]:
             )
         ]
     return []
+
+
+def _check_fused(ns: dict, watch: _Watch | None) -> tuple[list[str], list[str]]:
+    del watch  # the stages of step 1 are read from the trace of the file itself
+    problems = _finished(ns, "fused_batches", capacity=True) + _seconds(ns, "fused_seconds")
+    trace_problems, notes = _trace(ns, "stage_trace")
+    pair_problems, pair_notes = _stage_pair(ns)
+    problems += trace_problems + pair_problems
+    notes += pair_notes
+    if not trace_problems:
+        trace = torch.as_tensor(ns["stage_trace"]).long()
+        problems += _early(ns, "stage_trace", trace[:, 0])
+        problems += _nve_length(ns, "stage_trace", trace[:, 1] - trace[:, 0])
+        notes += _cap_notes(ns, trace[:, 0])
+    return problems, notes
 
 
 def _both_stages(ns: dict, watch: _Watch, file: str) -> tuple[list[str], list[str]]:
@@ -476,6 +490,8 @@ def _check_relax_md(ns: dict, watch: _Watch | None) -> tuple[list[str], list[str
 
 @dataclass(frozen=True)
 class Step:
+    """One step of the notebook: its file, the names the file leaves, its contract, and the steps whose files run first."""
+
     file: str
     names: tuple[str, ...]
     check: Callable[[dict, Any], tuple[list[str], list[str]]]
@@ -503,6 +519,8 @@ def setup_source(size: str | None = None) -> str:
 
 
 def _order(step: str) -> list[str]:
+    """``step`` and the steps whose files run before it, in the order they run."""
+
     seen: list[str] = []
 
     def visit(name: str) -> None:
@@ -515,8 +533,40 @@ def _order(step: str) -> list[str]:
     return seen
 
 
-def _last_line(error: BaseException | None = None) -> str:
+def _last_line() -> str:
+    """The last line of the traceback of the exception being handled."""
+
     return traceback.format_exc().strip().splitlines()[-1][:300]
+
+
+def _run_file(name: str, ns: dict, work_dir: Path) -> tuple[str | None, _Watch | None]:
+    """Run the file of step ``name`` in ``ns``; return (problem line or None, what its stages did).
+
+    When ``ns`` holds ``build_stages`` from step 1, the file gets one that counts the MD steps of
+    its stages. A file that replaces it with its own leaves an empty count.
+    """
+
+    spec = STEPS[name]
+    path = work_dir / spec.file
+    if not path.exists():
+        return LINES["missing_file"].format(step=name, file=spec.file, folder=work_dir), None
+    build = ns.get("build_stages")
+    watch = None
+    if callable(build):
+        watch = _Watch(total=len(ns["trajectories"]))
+        ns["build_stages"] = _watched(getattr(build, "__wrapped__", build), watch)
+    before = _fingerprint(ns["trajectories"])
+    try:
+        exec(compile(path.read_text(), str(path), "exec"), ns)
+    except Exception as error:
+        if isinstance(error, NameError) and getattr(error, "name", None) in NOT_IN_A_CELL:
+            return LINES["notebook_only"].format(step=name, file=spec.file, name=error.name), None
+        return LINES["stops"].format(step=name, file=spec.file, error=_last_line()), None
+    if not _same(before, _fingerprint(ns["trajectories"])):
+        return f"{name}: " + LINES["changed_input"].format(file=spec.file), None
+    if getattr(ns.get("build_stages"), "_agent07_watch", None) is not watch:
+        watch = _Watch(total=len(ns["trajectories"])) if name != "fused" else None
+    return None, watch
 
 
 def check_namespace(step: str, ns: dict, work_dir: Path) -> tuple[list[str], list[str]]:
@@ -524,28 +574,9 @@ def check_namespace(step: str, ns: dict, work_dir: Path) -> tuple[list[str], lis
 
     watch: _Watch | None = None
     for name in _order(step):
-        spec = STEPS[name]
-        path = Path(work_dir) / spec.file
-        if not path.exists():
-            return [LINES["missing_file"].format(step=name, file=spec.file, folder=work_dir)], []
-        build = ns.get("build_stages")
-        watch = None
-        if callable(build):
-            watch = _Watch(total=len(ns["trajectories"]))
-            ns["build_stages"] = _watched(getattr(build, "__wrapped__", build), watch)
-        before = _fingerprint(ns["trajectories"])
-        try:
-            exec(compile(path.read_text(), str(path), "exec"), ns)
-        except NameError as error:
-            if getattr(error, "name", None) in NOT_IN_A_CELL:
-                return [LINES["notebook_only"].format(step=name, file=spec.file, name=error.name)], []
-            return [LINES["stops"].format(step=name, file=spec.file, error=_last_line())], []
-        except Exception:
-            return [LINES["stops"].format(step=name, file=spec.file, error=_last_line())], []
-        if not _same(before, _fingerprint(ns["trajectories"])):
-            return [f"{name}: " + LINES["changed_input"].format(file=spec.file)], []
-        if getattr(ns.get("build_stages"), "_agent07_watch", None) is not watch:
-            watch = _Watch(total=len(ns["trajectories"])) if name != "fused" else None
+        problem, watch = _run_file(name, ns, Path(work_dir))
+        if problem is not None:
+            return [problem], []
     spec = STEPS[step]
     problems = [LINES["missing_name"].format(step=step, name=n) for n in spec.names if n not in ns]
     notes: list[str] = []
@@ -564,7 +595,7 @@ def check_step(step: str, work_dir: Path | None = None, size: str | None = None)
 
     from . import agent07 as helpers
 
-    work_dir = Path(work_dir or os.environ.get("ALCHEMI_AGENT07_WORK") or helpers.WORK_DIR)
+    work_dir = Path(work_dir or helpers.WORK_DIR)
     ns: dict[str, Any] = {"__name__": "__main__"}
     exec(setup_source(size), ns)
     return check_namespace(step, ns, work_dir)

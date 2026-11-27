@@ -1,7 +1,7 @@
 # Agent 08, "Paths of least resistance, batched": default prompts
 
 The typical learner prompt of each step, written from the step's text, its
-table and its Hint alone (revision of 2026-11-26; the neb and saddle Hints of the fix pass of 2026-11-27). A prompt names a helper
+table and its Hint alone. A prompt names a helper
 only where the step's Hint names it. Shapes, units and formats the step
 leaves out come from the step check (`python -m helpers.agent08 check <step>`),
 which the session lines tell the agent to run.
