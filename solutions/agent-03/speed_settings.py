@@ -75,7 +75,6 @@ for cueq, compiled in ((False, False), (True, False), (False, True), (True, True
 speed_table = pd.DataFrame(rows)
 print(f"timed on {n_timed} of {crystal_batch.num_graphs} crystals ({timed_batch.num_nodes} atoms), "
       f"{run_steps} L-BFGS steps per run")
-print(speed_table.round(3).to_string(index=False))
 
 setting_roles = {
     "cueq": "Replaces the model's equivariant tensor-product math with NVIDIA's faster GPU kernels. "

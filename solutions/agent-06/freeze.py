@@ -45,5 +45,5 @@ with frozen_md:
 # check: fragment A has not moved from the first saved frame to the last
 saved = [d.positions for d in frozen_store.read().to_data_list()]
 first, last = torch.cat(saved[:3]), torch.cat(saved[-3:])
-print("largest fragment A displacement (Å):", (last - first)[frozen_mask.cpu()].norm(dim=1).max().item())
-print("largest displacement of the rest (Å):", (last - first)[~frozen_mask.cpu()].norm(dim=1).max().item())
+print("largest fragment A displacement (Å):", f"{(last - first)[frozen_mask.cpu()].norm(dim=1).max().item():.3f}")
+print("largest displacement of the rest (Å):", f"{(last - first)[~frozen_mask.cpu()].norm(dim=1).max().item():.3f}")

@@ -17,5 +17,5 @@ mace_model = MACEWrapper.from_checkpoint("medium-mpa-0", device=device, dtype=to
 helpers.prepare_model_batch(crystal_batch, mace_model)
 forces = mace_model(crystal_batch)["forces"].detach()
 start_max_force = torch.zeros(crystal_batch.num_graphs, device=device, dtype=forces.dtype)
-start_max_force.scatter_reduce_(0, crystal_batch.batch_idx.long(), forces.norm(dim=-1),
-                                reduce="amax", include_self=False)
+start_max_force = start_max_force.scatter_reduce(
+    0, crystal_batch.batch_idx.long(), forces.norm(dim=-1), reduce="amax", include_self=False)

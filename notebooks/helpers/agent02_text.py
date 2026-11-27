@@ -102,7 +102,7 @@ BUILD_API_BOX = (
     ">\n"
     "> `Batch.from_raw_dicts([...], device=...)`\n"
     ">\n"
-    "> **Input:** raw tensors you trust, structure by structure\n"
+    "> **Input:** raw tensors you trust, structure by structure<br>\n"
     "> **Effect:** builds one `Batch`, without `AtomicData` and without validation"
 )
 
