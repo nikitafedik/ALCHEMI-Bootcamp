@@ -28,7 +28,7 @@ from . import common
 from .data_records import PROJECT_ROOT
 
 # ---------------------------------------------------------------------------
-# Learner-visible wording of the figure, as reviewed by the educator on the Tutorial Board (25 Nov 2026).
+# Learner-visible wording of the figure.
 # ---------------------------------------------------------------------------
 LEFT_TITLE = "Time to complete, lower is better"
 RIGHT_TITLE = "Throughput, higher is better"

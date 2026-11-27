@@ -46,5 +46,4 @@ What an agent has to get right, and what the check says when it does not:
 - Both radial distributions need the same `r_max` and number of bins.
 
 The rules behind "still liquid" and "follows the teacher" are in
-`helpers.agent09.still_liquid` and `helpers.agent09.follows_teacher`, from the
-prototype's report (notes/evidence/agent-09/proto-20261126/report.md, round 2).
+`helpers.agent09.still_liquid` and `helpers.agent09.follows_teacher`.

@@ -1,6 +1,8 @@
 """Write the liquid SiC cut of notebook 09 from the SiC-TGAP training set.
 
-Source: raw/dataset-SiC-TGAP.xyz (Zenodo 17182227, CC BY 4.0; see README.md and LICENSE). Writes cut/:
+Source: dataset-SiC-TGAP.xyz of the Zenodo record 10.5281/zenodo.17182227 (CC BY 4.0; see README.md and
+cut/LICENSE). The file is not in this repository: download it and save it as raw/dataset-SiC-TGAP.xyz beside this
+script. Writes cut/:
 
   liquid-train.extxyz.gz     300 frames of 216 atoms (Si108C108): every frame of the four liquid frame types
                              (melt_aimd, eqlMelt_aimd, quench_aimd, amorph_aimd) at the five training densities
@@ -11,10 +13,10 @@ Source: raw/dataset-SiC-TGAP.xyz (Zenodo 17182227, CC BY 4.0; see README.md and 
 
 Each frame keeps its DFT labels as dft_energy (eV, frame info) and dft_forces (eV/Å, per atom), with config_type,
 sub_config and source_index (0-based frame index in the source). The source's energy, forces, virial and stress
-fields are not copied. The frames are the same, in the same order, as the frame-count study's "mixed, n300" cut
-(notes/evidence/agent-09/frames-20261126/make_cuts.py), on which the course design was measured.
+fields are not copied. The frames keep the order of the source within each frame type. The output has no time
+stamp: every run on the same source gives the same bytes.
 
-Usage, from this folder:  python -I cut_liquid.py
+Usage, from this folder:  python cut_liquid.py
 """
 
 import collections
@@ -67,38 +69,44 @@ def write_gz(path: Path, frames) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def select(frames: dict, held_out: bool) -> list[int]:
+    """Source indices of the liquid frames at the held-out density, or at the others: by type, in source order."""
+
+    return [i for t in TYPES for i in sorted(frames)
+            if frames[i].info["config_type"] == t
+            and (density(frames[i].info["sub_config"]) == HELD_OUT_DENSITY) == held_out]
+
+
+def summary(frames: dict, indices: list[int]) -> dict:
+    """The record of one file: frame count, source indices, counts by type and by density."""
+
+    by_density = collections.Counter(density(frames[i].info["sub_config"]) for i in indices)
+    return {"frames": len(indices), "source_index": indices,
+            "by_type": dict(collections.Counter(frames[i].info["config_type"] for i in indices)),
+            "by_density": {str(k): v for k, v in sorted(by_density.items())}}
+
+
 def main() -> None:
     frames = {i: a for i, a in enumerate(iread(RAW, index=":", format="extxyz")) if a.info.get("config_type") in TYPES}
-    train_idx = [i for t in TYPES for i in sorted(frames)
-                 if frames[i].info["config_type"] == t and density(frames[i].info["sub_config"]) != HELD_OUT_DENSITY]
-    held_idx = [i for t in TYPES for i in sorted(frames)
-                if frames[i].info["config_type"] == t and density(frames[i].info["sub_config"]) == HELD_OUT_DENSITY]
+    train_idx, held_idx = select(frames, held_out=False), select(frames, held_out=True)
     assert not set(train_idx) & set(held_idx)
     assert all(len(frames[i]) == 216 for i in train_idx + held_idx)
     OUT.mkdir(exist_ok=True)
-    sha = {
-        "liquid-train.extxyz (uncompressed)": write_gz(OUT / "liquid-train.extxyz.gz", [clean(i, frames[i]) for i in train_idx]),
-        "liquid-heldout.extxyz (uncompressed)": write_gz(OUT / "liquid-heldout.extxyz.gz", [clean(i, frames[i]) for i in held_idx]),
-    }
-    count = collections.Counter
-
-    def summary(idx):
-        return {"frames": len(idx), "source_index": idx,
-                "by_type": dict(count(frames[i].info["config_type"] for i in idx)),
-                "by_density": {str(k): v for k, v in sorted(count(density(frames[i].info["sub_config"]) for i in idx).items())}}
-
+    train_sha = write_gz(OUT / "liquid-train.extxyz.gz", [clean(i, frames[i]) for i in train_idx])
+    held_sha = write_gz(OUT / "liquid-heldout.extxyz.gz", [clean(i, frames[i]) for i in held_idx])
     record = {
         "source": {"file": "raw/dataset-SiC-TGAP.xyz", "record": "https://zenodo.org/records/17182227",
                    "doi": "10.5281/zenodo.17182227", "licence": "CC BY 4.0",
                    "sha256": hashlib.sha256(RAW.read_bytes()).hexdigest()},
         "rule": "every frame of the four liquid types; density 2.7 held out whole",
-        "train": summary(train_idx),
-        "held_out": summary(held_idx),
-        "sha256": sha,
+        "train": summary(frames, train_idx),
+        "held_out": summary(frames, held_idx),
+        "sha256": {"liquid-train.extxyz (uncompressed)": train_sha, "liquid-heldout.extxyz (uncompressed)": held_sha},
     }
     (OUT / "cut-record.json").write_text(json.dumps(record, indent=1) + "\n")
-    print(json.dumps({k: {kk: vv for kk, vv in v.items() if kk != "source_index"} if isinstance(v, dict) and "frames" in v else v
-                      for k, v in record.items()}, indent=1))
+    for name in ("train", "held_out"):  # the counts, without the long index lists
+        print(name, json.dumps({k: v for k, v in record[name].items() if k != "source_index"}))
+    print("sha256", json.dumps(record["sha256"], indent=1))
 
 
 if __name__ == "__main__":

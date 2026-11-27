@@ -1,7 +1,7 @@
 # Agent 09, "Small-batch distilled" (liquid SiC): default prompts
 
-One typical learner prompt per step, written on 26 Nov 2026 from the step's
-text, table and Hints alone: each prompt carries nothing the step does not.
+One typical learner prompt per step, written from the step's text, table and
+Hints alone: each prompt carries nothing the step does not.
 The check is not in the prompts; the session lines printed by the setup cell
 tell the agent to run it after every file.
 

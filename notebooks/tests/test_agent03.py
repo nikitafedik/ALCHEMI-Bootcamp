@@ -488,7 +488,7 @@ def test_roles_keys_are_matched_without_case():
 
 
 # ---------------------------------------------------------------------------
-# The step check: messages (see notes/builder-03/check_messages.md)
+# The step check: messages
 # ---------------------------------------------------------------------------
 
 
@@ -1301,7 +1301,7 @@ def test_ladder_marks_a_copy_that_blew_up_and_judges_the_rest():
 
 
 def test_ladder_blowup_limit_keeps_the_hottest_intact_copies():
-    # Intact copies of the advisor's trial sat 3.5 and 4.7 eV per atom above the relaxed crystal.
+    # Intact copies in an earlier trial sat 3.5 and 4.7 eV per atom above the relaxed crystal.
     assert agent03.LADDER["blowup_ev_per_atom"] > 4.7 * 2
     time, temps, energy = _ladder_inputs()
     energy[5:, 5] = -5.4 + 4.7

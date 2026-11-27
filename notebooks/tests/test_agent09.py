@@ -31,7 +31,7 @@ from helpers import agent09_views as views
 
 CUT = _NOTEBOOK_DIR / "data" / "agent09" / "sic-tgap" / "cut"
 SOLUTIONS = _NOTEBOOK_DIR.parent / "solutions" / "agent-09"
-PLAN = _NOTEBOOK_DIR / "alchemi-agent-09-small-batch-distilled.plan.md"
+NOTEBOOK = _NOTEBOOK_DIR.parent / helpers.NOTEBOOK
 
 
 @pytest.fixture(autouse=True)
@@ -118,16 +118,20 @@ def test_solutions_folder_holds_only_this_design():
     assert files == sorted([*(s.file for s in check.STEPS.values()), "prompts.md", "solutions.md"])
 
 
-def test_plan_names_the_same_steps():
-    """The git-ignored plan, when present and on the liquid design, loads the same files."""
+def _notebook_code_cells() -> list[str]:
+    cells = json.loads(NOTEBOOK.read_text(encoding="utf-8"))["cells"]
+    return ["".join(cell["source"]) for cell in cells if cell["cell_type"] == "code"]
 
-    if not PLAN.is_file():
-        pytest.skip("the plan file is not in this checkout (it is git-ignored)")
-    plan = PLAN.read_text(encoding="utf-8")
-    if "SiC" not in plan or "structure.py" not in plan:
-        pytest.skip("the plan does not describe the liquid SiC design yet")
-    loads = re.findall(r"%load agent09_work/(\w+\.py)", plan)
-    assert [s.file for s in check.STEPS.values()] == list(dict.fromkeys(loads))
+
+def test_notebook_loads_the_same_steps():
+    """The notebook has one ``%load`` cell per step, in the order of the check."""
+
+    loads = [re.fullmatch(r"%load agent09_work/(\w+\.py)", cell.strip()) for cell in _notebook_code_cells()]
+    assert [m.group(1) for m in loads if m] == [s.file for s in check.STEPS.values()]
+
+
+def test_notebook_setup_cell_is_the_one_the_check_runs():
+    assert helpers.SETUP_CELL in _notebook_code_cells()
 
 
 # --- the data ----------------------------------------------------------------
@@ -155,11 +159,11 @@ def test_starts_are_equilibrated_liquid_of_the_training_densities():
         assert atoms.info["density"] != 2.7
         density, temperature = helpers.target_temperature(atoms.cell.array)
         assert density == atoms.info["density"] and temperature == atoms.info["temperature_K"]
-    # the prototype's starts (notes/evidence/agent-09/proto-20261126/results/w1.json)
+    # sixteen starts over the five training densities: 6 at 3000 K (2.3 and 2.5 g/cm3), then 4, 3 and 3
     assert [a.info["temperature_K"] for a in starts] == [3000.0] * 6 + [3400.0] * 4 + [3700.0] * 3 + [4000.0] * 3
     assert [a.info["density"] for a in starts] == [a.info["density"] for a in test_starts]
     assert not {a.info["source_index"] for a in starts} & {a.info["source_index"] for a in test_starts}
-    small, small_test = helpers.load_starts(2)
+    small, _ = helpers.load_starts(2)
     assert [a.info["density"] for a in small] == [2.3, 3.2]
 
 
@@ -385,7 +389,8 @@ def test_a_small_store_is_unexpected_and_one_frame_is_a_problem():
 
 def test_stability_must_be_the_monitor_metrics():
     problems = []
-    assert not check._stability_problems("run_student", {"stability": {"first_divergence_step": None}, "test_steps": 800}, problems)
+    ns = {"stability": {"first_divergence_step": None}, "test_steps": 800}
+    assert not check._is_stability_of_run("run_student", ns, problems)
     assert problems[0].startswith("run_student: stability is dict; it should be the metrics of the StabilityMonitor")
 
 
@@ -398,8 +403,13 @@ def test_structure_needs_radial_distributions():
     ]
 
 
-def test_budgets_variable_has_one_value_per_budget():
-    assert len("4,2,30,20,40".split(",")) == len(helpers.BUDGET_NAMES)
+def test_documented_small_setting_has_one_value_per_budget():
+    """The small CPU setting written in solutions.md gives every budget of the setup cell a value."""
+
+    text = (SOLUTIONS / "solutions.md").read_text(encoding="utf-8")
+    budgets = re.search(r"ALCHEMI_AGENT09_BUDGETS=([\d,]+)", text).group(1)
+    assert len(budgets.split(",")) == len(helpers.BUDGET_NAMES)
+    assert re.search(r"ALCHEMI_AGENT09_SUBSET=\d+,\d+\b", text)
 
 
 # --- with the pretrained model -----------------------------------------------
@@ -422,7 +432,7 @@ def test_prepare_finetuning_scores_the_published_model_by_frame_kind(work, monke
     import torch
 
     monkeypatch.setenv("ALCHEMI_AGENT09_SUBSET", "4,3")
-    train_path, test_path, base = helpers.prepare_finetuning(torch.device("cpu"))
+    _, test_path, base = helpers.prepare_finetuning(torch.device("cpu"))
     result = helpers.score(base, test_path)
     assert result["frames"] == 3 and result["atoms"] == 3 * 216
     rows = helpers.errors_by_kind(test_path, {"published": result})

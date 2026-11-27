@@ -5,10 +5,9 @@
 
 All words a learner reads from the helper are in this file: the session
 lines, the labels of figures and tables, and the one line under a result.
-They are DRAFTS until the educator approves them on the board. Every figure
-has a ``build_*`` function that returns a Matplotlib figure (used by the
-tests); ``show`` draws it as one picture, 920 px wide, in the course figure
-style (light only).
+Every figure has a ``build_*`` function that returns a Matplotlib figure (used
+by the tests); ``show`` draws it as one picture, 920 px wide, in the course
+figure style (light only).
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _STYLE = _PROJECT_ROOT / "shared" / "alchemi-figure.mplstyle"
 DISPLAY_PX = 920
 # Colours of the course figure style: green main result, grey baseline, ink reference.
-GREEN, GREY, LIGHT_GREY, INK = "#76B900", "#6F6F6F", "#B8B8B8", "#1A1A1A"
+GREEN, GREY, INK = "#76B900", "#6F6F6F", "#1A1A1A"
 
 SESSION_TEXT = (
     "Give these to your agent when you start the session:\n"
@@ -202,33 +201,48 @@ def errors_line(rows: dict, models: list[str]) -> str:
     ``models`` are the model keys in table order ("published", "finetuned", "student").
     """
 
-    total = rows[ALL_FRAMES]
-    if models[:2] == ["published", "finetuned"] and "student" not in models:
-        before, after = total["published"], total["finetuned"]
-        fell = after["force"] < (1.0 - ERRORS_LEAST_FALL) * before["force"] and round(after["energy"], 1) < round(
-            before["energy"], 1
-        )
-        text = (FINETUNE_FELL if fell else FINETUNE_UNEXPECTED).format(
-            frames=total["frames"], e0=before["energy"], e1=after["energy"], f0=before["force"], f1=after["force"]
-        )
-        for kind, row in rows.items():
-            if kind == ALL_FRAMES:
-                continue
-            for what, rose in (
-                ("energy", round(row["finetuned"]["energy"], 1) > round(row["published"]["energy"], 1)),
-                ("force", round(row["finetuned"]["force"], 3) > round(row["published"]["force"], 3)),
-            ):
-                if rose:
-                    text += FINETUNE_TYPE_ROSE.format(kind=kind.lower(), what=what)
-        return text
     if "student" in models:
-        student, finetuned, published = total["student"], total.get("finetuned"), total["published"]
-        good = student["force"] <= published["force"]
-        template = STUDENT_DFT if good and finetuned is not None else STUDENT_DFT_UNEXPECTED
-        return template.format(
-            fs=student["force"], ff=(finetuned or published)["force"], fp=published["force"], es=student["energy"]
-        )
+        return _student_errors_line(rows[ALL_FRAMES])
+    if models[:2] == ["published", "finetuned"]:
+        return _finetune_errors_line(rows)
     return ""
+
+
+def _finetune_errors_line(rows: dict) -> str:
+    """Published against fine-tuned: both errors fell on all frames, or not; then each frame kind where one rose.
+
+    The comparisons use the numbers as the table shows them: energies to 0.1 meV/atom, forces to 0.001 eV/Å.
+    """
+
+    total = rows[ALL_FRAMES]
+    before, after = total["published"], total["finetuned"]
+    fell = after["force"] < (1.0 - ERRORS_LEAST_FALL) * before["force"] and round(after["energy"], 1) < round(
+        before["energy"], 1
+    )
+    text = (FINETUNE_FELL if fell else FINETUNE_UNEXPECTED).format(
+        frames=total["frames"], e0=before["energy"], e1=after["energy"], f0=before["force"], f1=after["force"]
+    )
+    for kind, row in rows.items():
+        if kind == ALL_FRAMES:
+            continue
+        for what, rose in (
+            ("energy", round(row["finetuned"]["energy"], 1) > round(row["published"]["energy"], 1)),
+            ("force", round(row["finetuned"]["force"], 3) > round(row["published"]["force"], 3)),
+        ):
+            if rose:
+                text += FINETUNE_TYPE_ROSE.format(kind=kind.lower(), what=what)
+    return text
+
+
+def _student_errors_line(total: dict) -> str:
+    """The student against DFT on all frames, set beside the published and the fine-tuned model."""
+
+    student, finetuned, published = total["student"], total.get("finetuned"), total["published"]
+    good = student["force"] <= published["force"]
+    template = STUDENT_DFT if good and finetuned is not None else STUDENT_DFT_UNEXPECTED
+    return template.format(
+        fs=student["force"], ff=(finetuned or published)["force"], fp=published["force"], es=student["energy"]
+    )
 
 
 def student_line(error: float, teacher_force: float, energy_gap: float) -> str:
@@ -250,8 +264,8 @@ def stability_line(verdict: dict) -> str:
         return STABILITY_SHORT.format(steps=verdict["steps"], least=verdict["least_steps"], divergence=divergence)
     done, total = verdict["n_liquid"], verdict["copies"]
     if done == total and verdict["first_divergence_step"] is None:
-        return STABILITY_ALL.format(done=done, total=total, steps=verdict["steps"])
-    return STABILITY_SOME.format(done=done, total=total, steps=verdict["steps"], why="; ".join(verdict["reasons"]))
+        return STABILITY_ALL.format(done=done, total=total)
+    return STABILITY_SOME.format(done=done, total=total, why="; ".join(verdict["reasons"]))
 
 
 def structure_line(verdict: dict) -> str:

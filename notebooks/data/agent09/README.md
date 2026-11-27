@@ -1,9 +1,9 @@
 # Agentic 09 data
 
-Notebook 09 reads one folder: `sic-tgap/cut/`, DFT frames of liquid, quenched and amorphous SiC from the public
-SiC-TGAP set (CC BY 4.0). Source, licence, citation and the cut: `sic-tgap/README.md`; licence statement and list of
-changes: `sic-tgap/cut/LICENSE`.
+Notebook 09 reads one folder: `sic-tgap/cut/`, 360 DFT frames of liquid, quenched and amorphous SiC (216 atoms each)
+from the public SiC-TGAP set (Zenodo, DOI 10.5281/zenodo.17182227, CC BY 4.0).
 
-The other folders and files here are not read by the notebook. They hold the data of earlier designs and of the
-dataset survey of 26 Nov 2026 (`mof-finetune/`, `ge-tgap/`, `zuo-mlearn/`, the Mg-MOF-74 stand-in files) and
-`sic-tgap/raw/`, the source of the cut. Which of them ship is open (notes/cleanup/rework-09.txt).
+- Source, licence, citation, how the cut was made and what was verified: `sic-tgap/README.md`
+- Licence statement and list of changes: `sic-tgap/cut/LICENSE`
+- The script that wrote the cut: `sic-tgap/cut_liquid.py`. It needs the source file from Zenodo, which is not in
+  this repository.

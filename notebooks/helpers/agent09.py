@@ -59,7 +59,7 @@ _CUT = _NOTEBOOKS / "data" / "agent09" / "sic-tgap" / "cut"
 _TRAIN_FILE, _HELD_OUT_FILE = "liquid-train.extxyz.gz", "liquid-heldout.extxyz.gz"
 _CHECKPOINT = "medium-mpa-0"
 
-# Tests, unattended runs and trials set these variables.
+# Tests and unattended runs set these variables.
 _WORK_DIR_VARIABLE = "ALCHEMI_AGENT09_WORK_DIR"  # keeps their Zarr stores out of the repository
 # The small CPU setting: "training frames,held-out frames" taken evenly from each frame type (for example "20,12").
 _SUBSET_VARIABLE = "ALCHEMI_AGENT09_SUBSET"
@@ -84,7 +84,7 @@ TEMPERATURE_BY_DENSITY = {2.3: 3000.0, 2.5: 3000.0, 2.7: 3000.0, 2.9: 3400.0, 3.
 _AMU_G = 1.66053906660e-24  # g
 _KB_EV = 8.617333262e-5  # eV/K
 
-# "Still liquid", per copy (notes/evidence/agent-09/proto-20261126/report.md, round 2, robust rules).
+# "Still liquid", per copy.
 LIQUID_TEMPERATURE_SHARE = 0.15  # mean temperature after the first 100 fs within 15% of the target
 LIQUID_SETTLE_FS = 100.0
 LIQUID_SHORTEST = 1.0  # Å, shortest distance in every frame (DFT liquid frames: 1.07 Å)
@@ -429,8 +429,8 @@ def load_starts(n_replicas: int):
 # ---------------------------------------------------------------------------
 
 
-def read_store(path):
-    """Every structure of a Zarr store as one Batch on the CPU, with the reader: ``(reader, batch)``."""
+def _load_store(path, batch_size: int | None = None):
+    """A Zarr store on the CPU: ``(reader, batches)``; without ``batch_size`` every structure is in one batch."""
 
     import torch
     from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, InMemoryDataset
@@ -440,19 +440,20 @@ def read_store(path):
         # float64 labels are read beside float32 positions; the reader says so once per field
         warnings.filterwarnings("ignore", message="AtomicData field .* was cast from", category=UserWarning)
         dataset = InMemoryDataset(reader=reader, device=torch.device("cpu"))
-        return reader, next(iter(DataLoader(dataset, batch_size=len(reader))))
+        return reader, list(DataLoader(dataset, batch_size=batch_size or len(reader)))
 
 
-def _batches(path, batch_size: int):
+def read_store(path):
+    """Every structure of a Zarr store as one Batch on the CPU, with the reader: ``(reader, batch)``."""
+
+    reader, batches = _load_store(path)
+    return reader, batches[0]
+
+
+def store_batches(path, batch_size: int) -> list:
     """The structures of a Zarr store in batches on the CPU."""
 
-    import torch
-    from nvalchemi.data.datapipes import AtomicDataZarrReader, DataLoader, InMemoryDataset
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="AtomicData field .* was cast from", category=UserWarning)
-        dataset = InMemoryDataset(reader=AtomicDataZarrReader(str(path)), device=torch.device("cpu"))
-        return list(DataLoader(dataset, batch_size=batch_size))
+    return _load_store(path, batch_size)[1]
 
 
 def make_student(dataset_path, device=None):
@@ -544,22 +545,26 @@ def _model_device(model):
         return torch.device("cpu")
 
 
+def _call_model(model, batch) -> dict:
+    """The outputs of one call of ``model`` on a copy of ``batch``, on the model's device."""
+
+    from .model_support import prepare_model_batch
+
+    work = batch.clone().to(_model_device(model))
+    prepare_model_batch(work, model)
+    return model(work)
+
+
 def model_forces(model, batch):
     """Forces (eV/Å) from one call of ``model`` on a copy of ``batch``, on the model's device."""
 
-    from .model_support import prepare_model_batch
-
-    work = batch.clone().to(_model_device(model))
-    prepare_model_batch(work, model)
-    return model(work)["forces"].detach()
+    return _call_model(model, batch)["forces"].detach()
 
 
 def _energy_and_forces(model, batch):
-    from .model_support import prepare_model_batch
+    """Energies (eV, one per structure) and forces (eV/Å) from one call of ``model``, float64 on the CPU."""
 
-    work = batch.clone().to(_model_device(model))
-    prepare_model_batch(work, model)
-    out = model(work)
+    out = _call_model(model, batch)
     return out["energy"].detach().double().reshape(-1).cpu(), out["forces"].detach().double().cpu()
 
 
@@ -602,7 +607,7 @@ def score(model, path, batch_size: int = 8) -> dict:
     was_training = model.training
     model.eval()
     try:
-        for batch in _batches(path, batch_size):
+        for batch in store_batches(path, batch_size):
             energy, force = _energy_and_forces(model, batch)
             target = batch.forces.detach().double().cpu()
             forces.append(force)
@@ -667,15 +672,16 @@ def errors_by_kind(test_path, scores: dict) -> dict:
 def compare_on_frames(frames_path, teacher_model, batch_size: int = 16) -> dict:
     """Set the forces (and energies) stored in ``frames_path`` against the teacher's on the same frames.
 
-    Returns the per-atom force magnitudes of both (eV/Å), the mean length of the
-    difference vector, the mean teacher force, and, when the store holds
-    ``energy``, the root mean square energy difference per atom (meV/atom).
+    Returns the number of frames, the per-atom force magnitudes of both (eV/Å),
+    the mean length of the difference vector, the mean teacher force, and, when
+    the store holds ``energy``, the root mean square energy difference per atom
+    (meV/atom).
     """
 
     import torch
 
     stored, reference, energy_gap, frames = [], [], [], 0
-    for batch in _batches(frames_path, batch_size):
+    for batch in store_batches(frames_path, batch_size):
         frames += int(batch.num_graphs)
         energy, force = _energy_and_forces(teacher_model, batch)
         stored.append(batch.forces.detach().double().cpu())
@@ -684,19 +690,13 @@ def compare_on_frames(frames_path, teacher_model, batch_size: int = 16) -> dict:
             atoms = torch.bincount(batch.batch_idx.cpu().long(), minlength=batch.num_graphs).double()
             energy_gap.append((batch.energy.detach().double().cpu().reshape(-1) - energy) / atoms * 1000.0)
     stored, reference = torch.cat(stored), torch.cat(reference)
-    error = (stored - reference).norm(dim=-1)
-    gap = torch.cat(energy_gap) if energy_gap else None
     return {
         "frames": frames,
-        "atoms": int(stored.shape[0]),
         "student_force": stored.norm(dim=-1).numpy(),
         "teacher_force": reference.norm(dim=-1).numpy(),
-        "mean_error": float(error.mean()),
-        "largest_error": float(error.max()),
+        "mean_error": float((stored - reference).norm(dim=-1).mean()),
         "mean_teacher_force": float(reference.norm(dim=-1).mean()),
-        "energy_gap": None if gap is None else float(gap.pow(2).mean().sqrt()),
-        "energy_bias": None if gap is None else float(gap.mean()),
-        "finite": bool(torch.isfinite(stored).all()),
+        "energy_gap": float(torch.cat(energy_gap).pow(2).mean().sqrt()) if energy_gap else None,
     }
 
 
@@ -747,8 +747,57 @@ def _temperatures(batch):
     return (2.0 * energy.cpu() / (3.0 * atoms * _KB_EV)).cpu()
 
 
-def _divergence_step(stability):
-    return getattr(stability, "first_divergence_step", None) if stability is not None else None
+def _unwrapped_msd(positions, cells, inverse):
+    """Mean squared displacement from the first saved frame, Å², as ``[frame, copy]``.
+
+    The displacement is unwrapped: the minimum image between consecutive saved frames, summed over the run.
+    ``positions`` is ``[frame, copy, atom, 3]``; ``cells`` and ``inverse`` are one matrix per copy.
+    """
+
+    import torch
+
+    step = positions[1:] - positions[:-1]
+    fractional = torch.einsum("fcai,cij->fcaj", step, inverse)
+    fractional -= fractional.round()
+    step = torch.einsum("fcaj,cjk->fcak", fractional, cells)
+    displacement = torch.cat([torch.zeros_like(positions[:1]), step.cumsum(0)])
+    return displacement.pow(2).sum(-1).mean(-1)
+
+
+def _shortest_distances(positions, cells, inverse):
+    """Shortest interatomic distance (minimum image) of every copy in every frame, Å, as ``[frame, copy]``."""
+
+    import torch
+
+    frames, copies, atoms = positions.shape[:3]
+    shortest = torch.empty(frames, copies, dtype=torch.float64)
+    own = torch.eye(atoms, dtype=torch.float64) * 1e9  # keeps an atom's distance to itself out of the minimum
+    for f in range(frames):
+        d = positions[f][:, :, None, :] - positions[f][:, None, :, :]
+        fractional = torch.einsum("caki,cij->cakj", d, inverse)
+        fractional -= fractional.round()
+        distance = torch.einsum("cakj,cjl->cakl", fractional, cells)
+        shortest[f] = (distance.norm(dim=-1) + own).reshape(copies, -1).min(dim=1).values
+    return shortest
+
+
+def _not_liquid_reasons(rows: list[dict], finite: bool, divergence) -> list[str]:
+    """Why some copies are not liquid, in words, one entry per rule that failed."""
+
+    reasons = []
+    if not finite:
+        reasons.append("positions or forces that are not finite")
+    if divergence is not None:
+        reasons.append(f"StabilityMonitor found a divergence at step {divergence}")
+    for key, words in (
+        ("ok_temperature", "{n} off the target temperature by more than 15%"),
+        ("ok_distance", "{n} with two atoms closer than 1.0 Å"),
+        ("ok_diffusion", "{n} whose atoms stopped moving apart"),
+    ):
+        n = sum(not r[key] for r in rows)
+        if n:
+            reasons.append(words.format(n=f"{n} cop{'y' if n == 1 else 'ies'}"))
+    return reasons
 
 
 def still_liquid(frames_path, stability=None, steps: int | None = None) -> dict:
@@ -777,34 +826,21 @@ def still_liquid(frames_path, stability=None, steps: int | None = None) -> dict:
     cells = batch.cell.detach().cpu().double().reshape(frames, copies, 3, 3)[0]
     inverse = torch.linalg.inv(cells)
     finite = bool(torch.isfinite(batch.positions).all()) and bool(torch.isfinite(batch.forces).all())
-    temperature = _temperatures(batch).reshape(frames, copies) if "velocities" in batch else None
-    if stability is not None and getattr(stability, "last_step", None) is not None:
+    divergence = getattr(stability, "first_divergence_step", None)
+    if getattr(stability, "last_step", None) is not None:
         steps = int(stability.last_step)
     steps = int(steps) if steps is not None else frames
-    interval = steps / frames if frames else 1.0
-    # unwrapped displacement from the first saved frame: minimum image between consecutive saved frames
-    step = positions[1:] - positions[:-1]
-    fractional = torch.einsum("fcai,cij->fcaj", step, inverse)
-    fractional -= fractional.round()
-    step = torch.einsum("fcaj,cjk->fcak", fractional, cells)
-    displacement = torch.cat([torch.zeros_like(positions[:1]), step.cumsum(0)])
-    msd = displacement.pow(2).sum(-1).mean(-1)  # [frame, copy]
-    shortest = torch.empty(frames, copies, dtype=torch.float64)
-    eye = torch.eye(atoms, dtype=torch.float64) * 1e9
-    for f in range(frames):
-        d = positions[f][:, :, None, :] - positions[f][:, None, :, :]
-        fr = torch.einsum("caki,cij->cakj", d, inverse)
-        fr -= fr.round()
-        dist = torch.einsum("cakj,cjl->cakl", fr, cells)
-        shortest[f] = (dist.norm(dim=-1) + eye).reshape(copies, -1).min(dim=1).values
-    skip = min(frames - 1, max(1, math.ceil(LIQUID_SETTLE_FS / max(interval, 1e-9)))) if frames > 1 else 0
+
+    msd = _unwrapped_msd(positions, cells, inverse)
+    shortest = _shortest_distances(positions, cells, inverse)
+    temperature = _temperatures(batch).reshape(frames, copies) if "velocities" in batch else None
+    interval = steps / frames if frames else 1.0  # steps between saved frames; a step is taken as 1 fs
+    settled = min(frames - 1, max(1, math.ceil(LIQUID_SETTLE_FS / max(interval, 1e-9)))) if frames > 1 else 0
     half = frames // 2
-    divergence = _divergence_step(stability)
-    judged = steps >= LIQUID_LEAST_STEPS and frames >= 4
     rows = []
     for c in range(copies):
         density, target = target_temperature(cells[c].numpy(), atoms)
-        mean_t = float(temperature[skip:, c].mean()) if temperature is not None else float("nan")
+        mean_t = float(temperature[settled:, c].mean()) if temperature is not None else float("nan")
         row = {
             "density": density, "target_K": target, "mean_T_K": mean_t,
             "shortest_A": float(shortest[:, c].min()), "msd_end_A2": float(msd[-1, c]),
@@ -814,32 +850,27 @@ def still_liquid(frames_path, stability=None, steps: int | None = None) -> dict:
             np.isfinite(mean_t) and abs(mean_t / target - 1.0) <= LIQUID_TEMPERATURE_SHARE
         )
         row["ok_distance"] = row["shortest_A"] >= LIQUID_SHORTEST
-        row["ok_diffusion"] = row["msd_end_A2"] >= LIQUID_MSD and row["msd_end_A2"] >= LIQUID_MSD_GROWTH * row["msd_half_A2"]
-        row["liquid"] = bool(finite and divergence is None and row["ok_temperature"] and row["ok_distance"] and row["ok_diffusion"])
+        row["ok_diffusion"] = (
+            row["msd_end_A2"] >= LIQUID_MSD and row["msd_end_A2"] >= LIQUID_MSD_GROWTH * row["msd_half_A2"]
+        )
+        row["liquid"] = bool(
+            finite and divergence is None and row["ok_temperature"] and row["ok_distance"] and row["ok_diffusion"]
+        )
         rows.append(row)
-    reasons = []
-    if not finite:
-        reasons.append("positions or forces that are not finite")
-    if divergence is not None:
-        reasons.append(f"StabilityMonitor found a divergence at step {divergence}")
-    for key, words in (
-        ("ok_temperature", "{n} off the target temperature by more than 15%"),
-        ("ok_distance", "{n} with two atoms closer than 1.0 Å"),
-        ("ok_diffusion", "{n} whose atoms stopped moving apart"),
-    ):
-        n = sum(not r[key] for r in rows)
-        if n:
-            reasons.append(words.format(n=f"{n} cop{'y' if n == 1 else 'ies'}"))
     return {
-        "judged": judged, "copies": copies, "frames_per_copy": frames, "steps": steps,
-        "least_steps": LIQUID_LEAST_STEPS, "finite": finite, "first_divergence_step": divergence,
-        "n_liquid": sum(r["liquid"] for r in rows), "rows": rows, "reasons": reasons,
+        "judged": steps >= LIQUID_LEAST_STEPS and frames >= 4, "copies": copies, "frames_per_copy": frames,
+        "steps": steps, "least_steps": LIQUID_LEAST_STEPS, "finite": finite, "first_divergence_step": divergence,
+        "n_liquid": sum(r["liquid"] for r in rows), "rows": rows,
+        "reasons": _not_liquid_reasons(rows, finite, divergence),
     }
 
 
+def _bin_centres(rdf):
+    return 0.5 * (rdf.edges[1:] + rdf.edges[:-1])
+
+
 def _first_peak(rdf) -> float:
-    centres = 0.5 * (rdf.edges[1:] + rdf.edges[:-1])
-    return float(centres[int(rdf.g_r.argmax())])
+    return float(_bin_centres(rdf)[int(rdf.g_r.argmax())])
 
 
 def partial_rdfs(teacher_path, student_path, r_max: float = 6.0, num_bins: int = 60) -> dict:
@@ -850,7 +881,7 @@ def partial_rdfs(teacher_path, student_path, r_max: float = 6.0, num_bins: int =
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     out = {}
-    stores = [[b.to(device) for b in _batches(p, 64)] for p in (teacher_path, student_path)]
+    stores = [[b.to(device) for b in store_batches(p, 64)] for p in (teacher_path, student_path)]
     for name, pair in PAIRS.items():
         out[name] = tuple(radial_distribution(frames, r_max=r_max, num_bins=num_bins, pair=pair) for frames in stores)
     return out
@@ -860,7 +891,7 @@ def follows_teacher(teacher_rdf, student_rdf, partials: dict | None = None) -> d
     """Judge whether the student's structure follows the teacher's.
 
     It follows when the Jensen-Shannon divergence of the two curves over all
-    pairs is at most ten times the teacher-against-teacher floor (4.3e-5) and,
+    pairs is at most 4.3e-5, ten times the teacher-against-teacher floor, and,
     with ``partials`` (from ``partial_rdfs``), every pair's first peak is within
     one 0.1 Å bin of the teacher's. Fewer than 160 frames on either side are not
     judged.
@@ -878,7 +909,9 @@ def follows_teacher(teacher_rdf, student_rdf, partials: dict | None = None) -> d
         t, s = _first_peak(teacher), _first_peak(student)
         rows.append([name, pair_js, t, s])
         if abs(t - s) > STRUCTURE_PEAK_TOLERANCE + 1e-6:
-            reasons.append(f"first {_views.LABELS['structure']['pairs'][name]} peak at {s:.2f} Å, the teacher's at {t:.2f} Å")
+            reasons.append(
+                f"first {_views.LABELS['structure']['pairs'][name]} peak at {s:.2f} Å, the teacher's at {t:.2f} Å"
+            )
     judged = min(teacher_rdf.num_frames, student_rdf.num_frames) >= STRUCTURE_LEAST_FRAMES
     return {
         "judged": judged, "follows": judged and not reasons, "js": js, "bound": STRUCTURE_BOUND,
@@ -1014,16 +1047,13 @@ def show_structure(teacher_rdf, student_rdf, labeled_path=None, student_frames_p
     from IPython.display import HTML, Markdown, display
 
     labels = _views.LABELS["structure"]
-    partials = partial_rdfs(labeled_path, student_frames_path, teacher_rdf.r_max, teacher_rdf.counts.numel()) if (
-        labeled_path is not None and student_frames_path is not None) else None
+    partials = {}
+    if labeled_path is not None and student_frames_path is not None:
+        partials = partial_rdfs(labeled_path, student_frames_path, teacher_rdf.r_max, teacher_rdf.counts.numel())
     verdict = follows_teacher(teacher_rdf, student_rdf, partials)
-
-    def centres(rdf):
-        return (0.5 * (rdf.edges[1:] + rdf.edges[:-1])).numpy()
-
-    curves = [(labels["total"], centres(teacher_rdf), teacher_rdf.g_r.numpy(), student_rdf.g_r.numpy())]
-    for name, (teacher, student) in (partials or {}).items():
-        curves.append((labels["pairs"][name], centres(teacher), teacher.g_r.numpy(), student.g_r.numpy()))
+    curves = [(labels["total"], _bin_centres(teacher_rdf).numpy(), teacher_rdf.g_r.numpy(), student_rdf.g_r.numpy())]
+    for name, (teacher, student) in partials.items():
+        curves.append((labels["pairs"][name], _bin_centres(teacher).numpy(), teacher.g_r.numpy(), student.g_r.numpy()))
     _views.show(_views.build_structure_figure(curves), labels["alt"])
     names = {"total": labels["total"], **labels["pairs"]}
     display(HTML(_views.html_table(
@@ -1044,16 +1074,13 @@ def show_student_vs_teacher(student_frames_path, teacher_model) -> None:
 
     from IPython.display import HTML, Markdown, display
 
-    from nvalchemi.data.datapipes import AtomicDataZarrReader
-
     result = compare_on_frames(student_frames_path, teacher_model)
     labels = _views.LABELS["student"]
     _views.show(_views.build_force_figure(result["teacher_force"], result["student_force"]), labels["alt"])
-    frames = len(AtomicDataZarrReader(str(student_frames_path)))
     gap = result["energy_gap"]
     display(HTML(_views.html_table(
         [labels["frames"], labels["mean_force"], labels["mean_error"], labels["energy_gap"]],
-        [[frames, f"{result['mean_teacher_force']:.2f}", f"{result['mean_error']:.2f}",
+        [[result["frames"], f"{result['mean_teacher_force']:.2f}", f"{result['mean_error']:.2f}",
           "n/a" if gap is None else f"{gap:.0f}"]],
     )))
     display(Markdown(_views.student_line(result["mean_error"], result["mean_teacher_force"], gap or float("nan"))))
@@ -1090,7 +1117,7 @@ def _timed_run(model, starts, steps: int) -> float:
     return time.perf_counter() - start
 
 
-def compare_speed(teacher_model, student_model, starts, steps: int | None = None, repeats: int | None = None) -> dict:
+def compare_speed(teacher_model, student_model, starts) -> dict:
     """MD steps per second with each model on the same cells: one warm-up each, then alternating runs, median.
 
     On a GPU: 50 steps, three timed runs per model; on a CPU a short stand-in of
@@ -1098,8 +1125,8 @@ def compare_speed(teacher_model, student_model, starts, steps: int | None = None
     """
 
     gpu = _model_device(teacher_model).type == "cuda"
-    steps = steps or (TIMING_STEPS if gpu else TIMING_STEPS_CPU)
-    repeats = repeats or (TIMING_REPEATS if gpu else TIMING_REPEATS_CPU)
+    steps = TIMING_STEPS if gpu else TIMING_STEPS_CPU
+    repeats = TIMING_REPEATS if gpu else TIMING_REPEATS_CPU
     was_training = student_model.training
     student_model.eval()
     try:

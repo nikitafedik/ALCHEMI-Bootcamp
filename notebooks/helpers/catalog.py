@@ -27,9 +27,7 @@ _SMILES_MAX_ITERATIONS = 200
 _MACE_ALIAS = "medium-mpa-0"
 _MACE_SHA256 = "75428afe3a1d7d8062e19bcaabd5c433623cabf308242ec9fb493e38604fb638"
 
-# PROVISIONAL (educator decision "A - do mace wit materials only", 26 Nov 2026;
-# the list itself waits for the educator's pick). The one switch for the Core 00
-# picker: "materials" is twelve periodic systems for MACE-MPA-0; "mixed" is the
+# The one switch for the Core 00 picker: "materials" is twelve periodic systems for MACE-MPA-0; "mixed" is the
 # earlier set with nine organic molecules, kept so the choice can be reversed.
 CORE00_SYSTEM_SET = "materials"
 _ASE_LICENSE = "Built with ASE (LGPL-2.1-or-later); no third-party data file"

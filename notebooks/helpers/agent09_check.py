@@ -30,8 +30,7 @@ import json
 import os
 import sys
 import time
-import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = ["STEPS", "check_step", "main", "resolve_step"]
@@ -40,11 +39,10 @@ MIN_STRUCTURES = 24  # a smaller store is reported as unexpected
 SAMPLE_FRAMES = 8  # frames on which the check recomputes forces
 FORCE_TOLERANCE = 1e-2  # eV/Å: two calls of one model on one structure agree to this
 FINETUNE_LEAST_FALL = 0.02  # a force error that falls by less than 2% hardly changed
-# Without a GPU, a test or a trial may shrink the five budgets of the setup cell:
-# "optimizer steps,copies,MD steps,training steps,MD steps of the student's run".
+# The small CPU setting shrinks the five budgets of the setup cell with this variable:
+# "optimizer steps,copies,MD steps,training steps,MD steps of the student's run" (for example "4,2,30,20,40").
 _BUDGETS_VARIABLE = "ALCHEMI_AGENT09_BUDGETS"
 _CACHE_FOLDER = ".check_cache"
-_TRACE_VARIABLE = "ALCHEMI_AGENT09_TRACE"
 _SCRIPT_NAMES = {"__file__"}  # names a script has and a notebook cell does not
 
 
@@ -54,7 +52,7 @@ class Step:
 
     file: str
     names: tuple[str, ...]
-    after: tuple[str, ...] = field(default=())
+    after: tuple[str, ...] = ()
 
 
 STEPS: dict[str, Step] = {
@@ -186,14 +184,14 @@ def _enough(step, name, reader, problems, notes) -> None:
 
 
 def _are_liquid_cells(step, name, batch, ns, problems) -> bool:
-    """Every structure of the store is a liquid SiC cell of the starts: 216 atoms, Si108C108, periodic, a course cell."""
+    """Every structure of the store is a liquid cell of the starts: 216 atoms, Si108C108, periodic, a course cell."""
 
     import torch
 
     reference = ns["starts"][0]
     atoms = len(reference)
     ptr = batch.batch_ptr.cpu().long()
-    sizes = (ptr[1:] - ptr[:-1])
+    sizes = ptr[1:] - ptr[:-1]
     if not bool((sizes == atoms).all()):
         problems.append(f"{step}: the structures in the store at {name} are not whole liquid cells of {atoms} atoms")
         return False
@@ -319,7 +317,8 @@ def _check_finetune(ns, problems, notes, ctx) -> None:
     ours, theirs = dict(model.named_parameters()), dict(base.named_parameters())
     changed = [
         n for n, p in ours.items()
-        if n not in theirs or p.shape != theirs[n].shape or not bool((p.detach().cpu() == theirs[n].detach().cpu()).all())
+        if n not in theirs or p.shape != theirs[n].shape
+        or not bool((p.detach().cpu() == theirs[n].detach().cpu()).all())
     ]
     if not changed:
         problems.append(f"{step}: finetuned_model has the weights of base_model; the training did not update it")
@@ -365,14 +364,20 @@ def _check_sample_label(ns, problems, notes, ctx) -> None:
     if opened is None:
         return
     reader, batch = opened
-    if not _has_fields(step, name, reader, ("positions", "atomic_numbers", "cell", "pbc", "teacher_energy", "teacher_forces"), problems):
+    wanted = ("positions", "atomic_numbers", "cell", "pbc", "teacher_energy", "teacher_forces")
+    if not _has_fields(step, name, reader, wanted, problems):
         return
     _enough(step, name, reader, problems, notes)
     if not _are_liquid_cells(step, name, batch, ns, problems):
         return
     _frames_differ(step, name, batch, problems)
-    ok = _shape_and_finite(step, f"teacher_energy in the store at {name}", batch["teacher_energy"].reshape(-1), (batch.num_graphs,), "eV", problems)
-    ok &= _shape_and_finite(step, f"teacher_forces in the store at {name}", batch["teacher_forces"], (batch.num_nodes, 3), "eV/Å", problems)
+    energy, forces = batch["teacher_energy"].reshape(-1), batch["teacher_forces"]
+    ok = _shape_and_finite(
+        step, f"teacher_energy in the store at {name}", energy, (batch.num_graphs,), "eV", problems
+    )
+    ok &= _shape_and_finite(
+        step, f"teacher_forces in the store at {name}", forces, (batch.num_nodes, 3), "eV/Å", problems
+    )
     if not ok or problems:
         return
     gap, mean = _force_gap(ns["finetuned_model"], batch, batch["teacher_forces"])
@@ -437,7 +442,9 @@ def _check_distill(ns, problems, notes, ctx) -> None:
         )
 
 
-def _stability_problems(step, ns, problems) -> bool:
+def _is_stability_of_run(step, ns, problems) -> bool:
+    """``stability`` is the metrics of a ``StabilityMonitor`` that watched the student's run to its end."""
+
     value = ns["stability"]
     if type(value).__name__ != "StabilityMetrics" or not hasattr(value, "first_divergence_step"):
         problems.append(
@@ -461,19 +468,22 @@ def _check_run_student(ns, problems, notes, ctx) -> None:
         if _same_path(ns[name], ns[other]):
             problems.append(f"{step}: {name} is the store of {other}; the student's frames go to a new store")
             return
-    if not _stability_problems(step, ns, problems):
+    if not _is_stability_of_run(step, ns, problems):
         return
     opened = _open_store(step, name, ns, problems)
     if opened is None:
         return
     reader, batch = opened
-    if not _has_fields(step, name, reader, ("positions", "atomic_numbers", "cell", "pbc", "forces", "velocities"), problems):
+    wanted = ("positions", "atomic_numbers", "cell", "pbc", "forces", "velocities")
+    if not _has_fields(step, name, reader, wanted, problems):
         return
     _enough(step, name, reader, problems, notes)
     if not _are_liquid_cells(step, name, batch, ns, problems):
         return
     _frames_differ(step, name, batch, problems)
-    if not _shape_and_finite(step, f"forces in the store at {name}", batch.forces, (batch.num_nodes, 3), "eV/Å", problems):
+    if not _shape_and_finite(
+        step, f"forces in the store at {name}", batch.forces, (batch.num_nodes, 3), "eV/Å", problems
+    ):
         return
     if problems:
         return
@@ -544,14 +554,15 @@ def _check_structure(ns, problems, notes, ctx) -> None:
             continue
         if rdf.num_frames == frames:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            fresh = radial_distribution(
-                [b.to(device) for b in helpers._batches(ns[store], 64)], r_max=rdf.r_max, num_bins=rdf.counts.numel()
-            )
+            batches = [b.to(device) for b in helpers.store_batches(ns[store], 64)]
+            fresh = radial_distribution(batches, r_max=rdf.r_max, num_bins=rdf.counts.numel())
             if not bool(torch.allclose(fresh.g_r, rdf.g_r, rtol=1e-3, atol=1e-6)):
                 problems.append(f"{step}: {name} is not the radial distribution of the frames in {store}")
     if problems:
         return
-    partials = helpers.partial_rdfs(ns["labeled_path"], ns["student_frames_path"], teacher.r_max, teacher.counts.numel())
+    partials = helpers.partial_rdfs(
+        ns["labeled_path"], ns["student_frames_path"], teacher.r_max, teacher.counts.numel()
+    )
     verdict = helpers.follows_teacher(teacher, student, partials)
     if verdict["judged"] and not verdict["follows"]:
         notes.append(
@@ -600,6 +611,20 @@ def _save_results(step: str, ns: dict, work: Path) -> None:
     (cache / f"{step}.json").write_text(json.dumps(record))
 
 
+def _load_model(name: str, weights: Path, ns: dict, labeled_path):
+    """A saved model: the teacher as a frozen copy of ``base_model``, the student from ``make_student``."""
+
+    import torch
+
+    teacher = name == "finetuned_model"
+    model = copy.deepcopy(ns["base_model"]) if teacher else _helpers().make_student(labeled_path, ns["device"])
+    model.load_state_dict(torch.load(weights, map_location=ns["device"], weights_only=True))
+    if teacher:
+        for parameter in model.parameters():
+            parameter.requires_grad_(False)
+    return model.eval()
+
+
 def _load_results(step: str, ns: dict, work: Path) -> bool:
     """Put a passed step's results into ``ns``; ``False`` when there are none for the file as it is now."""
 
@@ -620,15 +645,8 @@ def _load_results(step: str, ns: dict, work: Path) -> bool:
                     return False
                 loaded[name] = Path(value["path"])
             elif "weights" in value:
-                if name == "finetuned_model":
-                    model = copy.deepcopy(ns["base_model"])
-                else:
-                    model = _helpers().make_student(loaded.get("labeled_path", ns.get("labeled_path")), ns["device"])
-                model.load_state_dict(torch.load(cache / value["weights"], map_location=ns["device"], weights_only=True))
-                if name == "finetuned_model":
-                    for parameter in model.parameters():
-                        parameter.requires_grad_(False)
-                loaded[name] = model.eval()
+                labeled_path = loaded.get("labeled_path", ns.get("labeled_path"))
+                loaded[name] = _load_model(name, cache / value["weights"], ns, labeled_path)
             elif "loss" in value:
                 loaded[name] = [(s, v) for s, v in value["loss"]]
             elif "object" in value:
@@ -706,6 +724,24 @@ def _error_line(step: str, error: Exception, attempt: int) -> str:
     return f"{step}: running {file} a second time failed: {_first_line(error)}"
 
 
+def _run_chain(step: str, work: Path, use_saved: bool):
+    """Run the setup cell, bring in the earlier steps, then run the step's file once.
+
+    Returns ``(ns, ctx, problem, error, used_saved)``: the namespace, the weight fingerprints taken before the
+    step's file ran, a problem line when an earlier step is missing or failed, the exception of the step's file
+    or ``None``, and whether saved results stood in for an earlier file.
+    """
+
+    ns = _setup_namespace()
+    ctx = {"base_weights": _weight_digest(ns["base_model"])}
+    problem, used_saved = _earlier_steps(step, ns, work, use_saved)
+    if problem:
+        return ns, ctx, problem, None, used_saved
+    if "finetuned_model" in ns:
+        ctx["teacher_weights"] = _weight_digest(ns["finetuned_model"])
+    return ns, ctx, None, _run_file(ns, work / STEPS[step].file), used_saved
+
+
 def check_step(step: str) -> tuple[list[str], list[str]]:
     """Run the chain up to ``step`` and check its contract. Returns (problem lines, unexpected lines)."""
 
@@ -713,29 +749,17 @@ def check_step(step: str) -> tuple[list[str], list[str]]:
     path = work / STEPS[step].file
     if not path.exists():
         return [f"{step}: the step file {STEPS[step].file} is missing in {work}"], []
-    use_saved = True
-    while True:
-        ns = _setup_namespace()
-        ctx = {"base_weights": _weight_digest(ns["base_model"])}
-        problem, used_saved = _earlier_steps(step, ns, work, use_saved)
-        if problem:
-            return [problem], []
-        if "finetuned_model" in ns:
-            ctx["teacher_weights"] = _weight_digest(ns["finetuned_model"])
-        error = _run_file(ns, path)
-        if isinstance(error, NameError) and used_saved:
-            # the name may come from an earlier file's imports: run the earlier files for real
-            use_saved = False
-            continue
-        break
-    if error is None:
-        error, attempt = _run_file(ns, path), 2  # the second run is a learner running the cell again
-    else:
-        attempt = 1
+    ns, ctx, problem, error, used_saved = _run_chain(step, work, use_saved=True)
+    if isinstance(error, NameError) and used_saved:
+        # the name may come from an earlier file's imports: run the earlier files for real
+        ns, ctx, problem, error, _ = _run_chain(step, work, use_saved=False)
+    if problem:
+        return [problem], []
     if error is not None:
-        if os.environ.get(_TRACE_VARIABLE):
-            traceback.print_exception(error)
-        return [_error_line(step, error, attempt)], []
+        return [_error_line(step, error, 1)], []
+    error = _run_file(ns, path)  # a learner runs the cell again
+    if error is not None:
+        return [_error_line(step, error, 2)], []
     problems = [f"{step}: {n} is missing; the step asks for it" for n in STEPS[step].names if n not in ns]
     if problems:
         return problems, []
@@ -743,8 +767,6 @@ def check_step(step: str) -> tuple[list[str], list[str]]:
     try:
         _CONTENT[step](ns, problems, notes, ctx)
     except Exception as exc:
-        if os.environ.get(_TRACE_VARIABLE):
-            traceback.print_exception(exc)
         problems.append(f"{step}: the results could not be checked: {_first_line(exc)}")
     if not problems:
         _save_results(step, ns, work)
