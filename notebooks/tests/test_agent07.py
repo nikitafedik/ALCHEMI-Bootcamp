@@ -286,7 +286,8 @@ def test_store_works_on_cpu_and_counts_late_entries():
 def test_store_device_defaults_to_the_run_device():
     store = agent07.CudaCompletionSink(capacity=2)
     assert store._device.type == ("cuda" if torch.cuda.is_available() else "cpu")
-    store.write(_real_batch([0, 1]), mask=torch.tensor([True, True]))
+    batch = _real_batch([0, 1]).to(store._device)  # the store takes batches on its own device
+    store.write(batch, mask=torch.tensor([True, True], device=store._device))
     assert len(store) == 2
 
 

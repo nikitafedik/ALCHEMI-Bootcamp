@@ -55,20 +55,45 @@ def model_checkpoint() -> Path:
 
 @contextmanager
 def suppress_known_mace_load_noise():
-    """Hide pinned dependency notices that do not describe the learner's run."""
+    """Hide pinned dependency notices that do not describe the learner's run.
 
-    with warnings.catch_warnings(), redirect_stdout(StringIO()):
-        warnings.filterwarnings(
-            "ignore",
-            message=r"invalid escape sequence.*",
-            category=SyntaxWarning,
-        )
-        warnings.filterwarnings(
-            "ignore",
-            message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
-            category=UserWarning,
-        )
-        yield
+    The first MACE import loads ``cuequivariance_ops_torch``, which runs
+    ``warnings.simplefilter("once")`` and so puts a rule in front of the course
+    filters; torch's "``torch.jit.script`` is deprecated" notice then printed in
+    the relaxation cell (L40S run, 27 Nov). The block records its warnings, drops
+    that notice by message and file, and shows the rest when it ends.
+    """
+
+    caught: list[warnings.WarningMessage] = []
+    try:
+        with warnings.catch_warnings(record=True) as caught, redirect_stdout(StringIO()):
+            warnings.filterwarnings(
+                "ignore",
+                message=r"invalid escape sequence.*",
+                category=SyntaxWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
+                category=UserWarning,
+            )
+            yield
+    finally:
+        for warning in caught:
+            if not is_torch_jit_notice(warning):
+                warnings.showwarning(
+                    warning.message, warning.category, warning.filename, warning.lineno
+                )
+
+
+def is_torch_jit_notice(warning: warnings.WarningMessage) -> bool:
+    """True for torch's "``torch.jit.*`` is deprecated" notice raised inside ``torch/jit``."""
+
+    return (
+        issubclass(warning.category, DeprecationWarning)
+        and str(warning.message).startswith("`torch.jit.")
+        and "/torch/jit/" in str(warning.filename).replace(os.sep, "/")
+    )
 
 
 def d3_parameter_file() -> Path:

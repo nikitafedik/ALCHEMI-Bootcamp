@@ -15,16 +15,15 @@ the step still passes. The words are in ``agent02_text.py``.
 
 from __future__ import annotations
 
+import math
 import os
 import sys
-import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .agent02_text import (
-    BUILD_ORDER_LINE,  # noqa: F401  (re-exported for the view and the tests)
-    BUILD_ROUTE_TEXT,  # noqa: F401
     PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH,
+    PROVISIONAL_N_STRUCTURES,
     PROVISIONAL_UNEXPECTED_ORDER_PASSES,
     line,
 )
@@ -36,6 +35,8 @@ SYSTEM_FIELDS = ("energy",)  # one row per structure; the others have one row pe
 
 @dataclass(frozen=True)
 class Step:
+    """One step of the notebook: its file, the names the file leaves, and the steps whose files run first."""
+
     file: str
     names: tuple[str, ...]
     after: tuple[str, ...] = field(default=())
@@ -49,7 +50,7 @@ SETUP = (
     "from helpers import agent02 as helpers\n"
     "helpers.configure_tutorial()\n"
     "work_dir = helpers.make_work_dir()\n"
-    "n_structures = 1000\n"  # the input row of build_routes names it (revision 26 Nov; equals PROVISIONAL_N_STRUCTURES)
+    f"n_structures = {PROVISIONAL_N_STRUCTURES}\n"  # the input row of build_routes names it
 )
 
 OPTIONAL_STEPS = ("my_batch", "build_routes")  # the "Try it" steps: a learner may skip them
@@ -67,8 +68,8 @@ STEPS: dict[str, Step] = {
 }
 
 # The steps of the notebook, in file order: a learner may name a step by its number, and the line for an
-# unknown step lists them. PROVISIONAL (a02q-build-routes, switch in agent02_text.py): build_routes replaces
-# own_batch, so the six steps end with zarr_roundtrip; as a third Try it all seven are listed.
+# unknown step lists them. While build_routes takes the place of own_batch (the switch in agent02_text.py),
+# the six numbered steps end with zarr_roundtrip; otherwise all seven are numbered.
 # own_batch keeps its check either way and can be run by name.
 NUMBERED_STEPS = tuple(name for name in STEPS if not (PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH and name == "own_batch"))
 
@@ -78,6 +79,8 @@ def _counts(batch) -> list[int]:
 
 
 def _run_file(ns: dict, work: Path, file: str):
+    """Run one file of the work folder in the namespace; return the error, or None."""
+
     path = work / file
     if not path.exists():
         return FileNotFoundError(line("file_missing", file=file))
@@ -108,21 +111,22 @@ def compare_saved_and_read(batch, loaded) -> dict:
     import torch
 
     enough = loaded.num_graphs >= batch.num_graphs and loaded.num_nodes >= batch.num_nodes
-    result = {"enough": enough, "tail": loaded.num_graphs > batch.num_graphs, "missing": [], "no_saved": [], "differs": []}
-    if enough:
-        for name in SAVED_FIELDS:
-            saved, read = getattr(batch, name, None), getattr(loaded, name, None)
-            if read is None:
-                result["missing"].append(name)
-            elif saved is None:
-                result["no_saved"].append(name)
-            else:
-                rows = batch.num_graphs if name in SYSTEM_FIELDS else batch.num_nodes
-                saved = saved.detach().cpu().double()
-                read = read.detach().cpu().double()[-rows:]
-                if saved.shape != read.shape or not bool(torch.allclose(saved, read, rtol=1e-6, atol=1e-6)):
-                    result["differs"].append(name)
-    result["same"] = enough and not (result["missing"] or result["no_saved"] or result["differs"])
+    result = {"enough": enough, "tail": loaded.num_graphs > batch.num_graphs, "missing": [], "no_saved": [], "differs": [], "same": False}
+    if not enough:
+        return result
+    for name in SAVED_FIELDS:
+        saved, read = getattr(batch, name, None), getattr(loaded, name, None)
+        if read is None:
+            result["missing"].append(name)
+        elif saved is None:
+            result["no_saved"].append(name)
+        else:
+            rows = batch.num_graphs if name in SYSTEM_FIELDS else batch.num_nodes
+            saved = saved.detach().cpu().double()
+            read = read.detach().cpu().double()[-rows:]
+            if saved.shape != read.shape or not bool(torch.allclose(saved, read, rtol=1e-6, atol=1e-6)):
+                result["differs"].append(name)
+    result["same"] = not (result["missing"] or result["no_saved"] or result["differs"])
     return result
 
 
@@ -133,29 +137,50 @@ BUILD_ORDER = ("tensors", "cpu_then_moved", "direct_gpu")  # fastest expected fi
 TIE_FRACTION = 0.10  # best times closer than this fraction of the slower route count as a tie, shown as unexpected
 
 
+def _route_of(label: str) -> str | None:
+    """The route a row label names, by its words; None when it names none."""
+
+    if "tensor" in label or "raw" in label:
+        return "tensors"
+    if "cpu" in label:
+        return "cpu_then_moved"
+    if "gpu" in label or "direct" in label:
+        return "direct_gpu"
+    return None
+
+
 def build_route_rows(frame) -> dict[str, int] | None:
     """Map each route to its row by the words in the route's name; None when a route cannot be told apart."""
 
-    rows: dict[str, int] = {}
     for column in [c for c in frame.columns if frame[c].dtype == object]:
+        rows: dict[str, int] = {}
         for index, label in enumerate(frame[column].astype(str).str.lower()):
-            if "tensor" in label or "raw" in label:
-                role = "tensors"
-            elif "cpu" in label:
-                role = "cpu_then_moved"
-            elif "gpu" in label or "direct" in label:
-                role = "direct_gpu"
-            else:
-                continue
-            rows.setdefault(role, index)
+            role = _route_of(label)
+            if role is not None:
+                rows.setdefault(role, index)
         if len(rows) == 3 and len(set(rows.values())) == 3:
             return rows
-        rows = {}
     return None
 
 
 _NOT_A_TIME = ("struct", "atom", "run", "repeat", "count", "graph", "node", "size", "field")  # size columns of the table
 _TIME_WORDS = ("best", "min", "median", "mean", "avg", "sec", "time", "_s", "ms", "wall", "duration")
+
+
+def _time_column(numbers):
+    """The column of the numeric part of a build table that holds the times; None when there is none."""
+
+    candidates = [
+        c for c in numbers.columns
+        if bool((numbers[c] > 0).all()) and bool(numbers[c].map(math.isfinite).all())
+        and not any(word in str(c).lower() for word in _NOT_A_TIME)
+    ]
+    for word in _TIME_WORDS:
+        named = next((c for c in candidates if word in str(c).lower()), None)
+        if named is not None:
+            return named
+    decimals = [c for c in candidates if numbers[c].dtype.kind == "f"]
+    return decimals[0] if decimals else None
 
 
 def build_route_times(frame) -> list[float]:
@@ -167,19 +192,7 @@ def build_route_times(frame) -> list[float]:
     """
 
     numbers = frame.select_dtypes("number")
-    candidates = [
-        c for c in numbers.columns
-        if bool((numbers[c] > 0).all()) and bool(numbers[c].map(lambda v: v == v and v != float("inf")).all())
-        and not any(word in str(c).lower() for word in _NOT_A_TIME)
-    ]
-    chosen = None
-    for word in _TIME_WORDS:
-        chosen = next((c for c in candidates if word in str(c).lower()), None)
-        if chosen is not None:
-            break
-    if chosen is None:
-        decimals = [c for c in candidates if numbers[c].dtype.kind == "f"]
-        chosen = decimals[0] if decimals else None
+    chosen = _time_column(numbers)
     if chosen is None:
         return []
     name = str(chosen).lower().rstrip(")] ")
@@ -209,6 +222,73 @@ def build_route_order(table) -> dict:
     return {"status": "unexpected" if marked else "usual", "rows": rows, "times": by_role, "marked": sorted(marked)}
 
 
+# ---------------------------------------------------------------------------
+# The content check of each step. ``add(key, **fields)`` reports one line of agent02_text.CHECK_LINES.
+# ---------------------------------------------------------------------------
+def _check_tensors(add, expected, why: str) -> None:
+    """Each ``(name, value, shape)`` of ``expected`` is a finite tensor of that shape."""
+
+    import torch
+
+    for name, tensor, shape in expected:
+        if not isinstance(tensor, torch.Tensor):
+            add("not_tensor", name=name, type=type(tensor).__name__)
+        elif tuple(tensor.shape) != shape:
+            add("tensor_shape", name=name, got=tuple(tensor.shape), why=why, expected=shape)
+        elif not bool(torch.isfinite(tensor).all()):
+            add("not_finite", name=name)
+
+
+def _structures_in_store(path) -> int | None:
+    """The number of structures in a Zarr store; None when nothing exists at the path."""
+
+    from nvalchemi.data.datapipes import AtomicDataZarrReader
+
+    if not os.path.exists(str(path)):
+        return None
+    return len(AtomicDataZarrReader(str(path)))
+
+
+def _check_atomic_data(ns: dict, add) -> None:
+    from nvalchemi.data import AtomicData
+
+    data = ns["caffeine_data"]
+    if not isinstance(data, AtomicData):
+        add("caffeine_type", type=type(data).__name__)
+    elif data.num_nodes != COUNTS[0]:
+        add("caffeine_atoms", n=data.num_nodes, expected=COUNTS[0])
+
+
+def _check_batch(ns: dict, add) -> None:
+    from nvalchemi.data import AtomicData, Batch
+
+    data_list, batch = ns["molecule_data"], ns["batch"]
+    if not (isinstance(data_list, list) and all(isinstance(d, AtomicData) for d in data_list)):
+        add("molecule_data_type")
+    else:
+        got = [d.num_nodes for d in data_list]
+        if sorted(got) != sorted(COUNTS):
+            add("molecule_data_counts", got=got, expected=COUNTS)
+    if not isinstance(batch, Batch):
+        add("batch_type", type=type(batch).__name__)
+    elif sorted(_counts(batch)) != sorted(COUNTS):
+        add("batch_counts", g=batch.num_graphs, got=_counts(batch), expected=COUNTS)
+
+
+def _check_my_batch(ns: dict, add) -> None:
+    from nvalchemi.data import Batch
+
+    mine, five = ns["my_batch"], ns["molecule_data"]
+    if not isinstance(mine, Batch):
+        add("my_batch_type", type=type(mine).__name__)
+        return
+    counts = _counts(mine)
+    if len(counts) != len(five) + 1:
+        add("my_batch_size", g=len(counts), expected=len(five) + 1)
+    elif not any(counts[:i] + counts[i + 1:] == [d.num_nodes for d in five] for i in range(len(counts))):
+        add("my_batch_order", got=counts)
+
+
 def _check_build_table(table, add) -> None:
     """build_table: one row per route with a time; the names of the columns are the learner's agent's choice."""
 
@@ -232,9 +312,75 @@ def _check_build_table(table, add) -> None:
         add("table_unnamed")
 
 
-# ---------------------------------------------------------------------------
-# The checks
-# ---------------------------------------------------------------------------
+def _check_build_routes(ns: dict, add) -> None:
+    _check_build_table(ns["build_table"], add)
+
+
+def _check_model_call(ns: dict, add) -> None:
+    import torch
+
+    batch, energy, forces = ns["batch"], ns["energy"], ns["forces"]
+    n_graphs, n_atoms = batch.num_graphs, batch.num_nodes
+    _check_tensors(add, (("energy", energy, (n_graphs, 1)), ("forces", forces, (n_atoms, 3))), "one call on the batch")
+    if isinstance(forces, torch.Tensor) and tuple(forces.shape) == (n_atoms, 3):
+        # the forces of an isolated molecule sum to zero; a larger sum says forces and atoms are out of step
+        owner = batch.batch_idx.to(forces.device)
+        sums = torch.zeros(n_graphs, 3, device=forces.device).index_add_(0, owner, forces.detach().float())
+        worst = float(sums.abs().max())
+        if worst > 0.05:
+            add("forces_sum", worst=worst)
+
+
+def _check_zarr_roundtrip(ns: dict, add) -> None:
+    from nvalchemi.data import Batch
+
+    path, loaded, batch = ns["store_path"], ns["loaded_batch"], ns["batch"]
+    stored = _structures_in_store(path)
+    if stored is None:
+        add("store_path_missing", name="store_path", path=path)
+    elif stored < batch.num_graphs:  # an appended store holds more
+        add("store_too_small", n=stored, name="batch", m=batch.num_graphs)
+    if not isinstance(loaded, Batch):
+        add("loaded_type", type=type(loaded).__name__)
+        return
+    verdict = compare_saved_and_read(batch, loaded)
+    if not verdict["enough"]:
+        add("loaded_size", g=loaded.num_graphs, a=loaded.num_nodes, g2=batch.num_graphs, a2=batch.num_nodes)
+        return
+    for name in verdict["missing"]:
+        add("loaded_no_field", name=name)
+    for name in verdict["no_saved"]:
+        add("saved_no_field", name=name)
+    for name in verdict["differs"]:
+        add("loaded_differs", name=name)
+
+
+def _check_own_batch(ns: dict, add) -> None:
+    from nvalchemi.data import Batch
+
+    own, energy, forces, store = ns["own_batch"], ns["own_energy"], ns["own_forces"], ns["own_store"]
+    if not isinstance(own, Batch):
+        add("own_batch_type", type=type(own).__name__)
+        return
+    _check_tensors(add, (("own_energy", energy, (own.num_graphs, 1)), ("own_forces", forces, (own.num_nodes, 3))), "own_batch")
+    stored = _structures_in_store(store)
+    if stored is None:
+        add("store_path_missing", name="own_store", path=store)
+    elif stored != own.num_graphs:
+        add("store_count_own", n=stored, m=own.num_graphs)
+
+
+_CONTENT_CHECKS = {
+    "atomic_data": _check_atomic_data,
+    "batch": _check_batch,
+    "my_batch": _check_my_batch,
+    "build_routes": _check_build_routes,
+    "model_call": _check_model_call,
+    "zarr_roundtrip": _check_zarr_roundtrip,
+    "own_batch": _check_own_batch,
+}
+
+
 def _check_names(step: str, ns: dict, problems: list[str]) -> bool:
     missing = [n for n in STEPS[step].names if n not in ns]
     for name in missing:
@@ -243,98 +389,69 @@ def _check_names(step: str, ns: dict, problems: list[str]) -> bool:
 
 
 def _check_content(step: str, ns: dict, problems: list[str]) -> None:
-    import torch
-    from nvalchemi.data import AtomicData, Batch
-
     def add(key: str, **fields) -> None:
         problems.append(line(key, step=step, **fields))
 
-    def tensor_checks(pairs, why: str) -> None:
-        for name, tensor, shape in pairs:
-            if not isinstance(tensor, torch.Tensor):
-                add("not_tensor", name=name, type=type(tensor).__name__)
-            elif tuple(tensor.shape) != shape:
-                add("tensor_shape", name=name, got=tuple(tensor.shape), why=why, expected=shape)
-            elif not bool(torch.isfinite(tensor).all()):
-                add("not_finite", name=name)
+    check = _CONTENT_CHECKS.get(step)
+    if check is not None:
+        check(ns, add)
 
-    if step == "atomic_data":
-        data = ns["caffeine_data"]
-        if not isinstance(data, AtomicData):
-            add("caffeine_type", type=type(data).__name__)
-        elif data.num_nodes != COUNTS[0]:
-            add("caffeine_atoms", n=data.num_nodes, expected=COUNTS[0])
-    elif step == "batch":
-        data_list, batch = ns["molecule_data"], ns["batch"]
-        if not (isinstance(data_list, list) and all(isinstance(d, AtomicData) for d in data_list)):
-            add("molecule_data_type")
-        else:
-            got = [d.num_nodes for d in data_list]
-            if sorted(got) != sorted(COUNTS):
-                add("molecule_data_counts", got=got, expected=COUNTS)
-        if not isinstance(batch, Batch):
-            add("batch_type", type=type(batch).__name__)
-        elif sorted(_counts(batch)) != sorted(COUNTS):
-            add("batch_counts", g=batch.num_graphs, got=_counts(batch), expected=COUNTS)
-    elif step == "my_batch":
-        mine, five = ns["my_batch"], ns["molecule_data"]
-        if not isinstance(mine, Batch):
-            add("my_batch_type", type=type(mine).__name__)
-            return
-        counts = _counts(mine)
-        if len(counts) != len(five) + 1:
-            add("my_batch_size", g=len(counts), expected=len(five) + 1)
-        elif not any(counts[:i] + counts[i + 1:] == [d.num_nodes for d in five] for i in range(len(counts))):
-            add("my_batch_order", got=counts)
-    elif step == "build_routes":
-        _check_build_table(ns["build_table"], lambda key, **fields: add(key, **fields))
-    elif step == "model_call":
-        batch, energy, forces = ns["batch"], ns["energy"], ns["forces"]
-        n_graphs, n_atoms = batch.num_graphs, batch.num_nodes
-        tensor_checks((("energy", energy, (n_graphs, 1)), ("forces", forces, (n_atoms, 3))), "one call on the batch")
-        if isinstance(forces, torch.Tensor) and tuple(forces.shape) == (n_atoms, 3):
-            owner = batch.batch_idx.to(forces.device)
-            sums = torch.zeros(n_graphs, 3, device=forces.device).index_add_(0, owner, forces.detach().float())
-            worst = float(sums.abs().max())
-            if worst > 0.05:
-                add("forces_sum", worst=worst)
-    elif step == "zarr_roundtrip":
-        from nvalchemi.data.datapipes import AtomicDataZarrReader
 
-        path, loaded, batch = ns["store_path"], ns["loaded_batch"], ns["batch"]
-        if not os.path.exists(str(path)):
-            add("store_path_missing", name="store_path", path=path)
-        else:
-            n = len(AtomicDataZarrReader(str(path)))
-            if n < batch.num_graphs:  # an appended store holds more
-                add("store_too_small", n=n, name="batch", m=batch.num_graphs)
-        if not isinstance(loaded, Batch):
-            add("loaded_type", type=type(loaded).__name__)
-            return
-        verdict = compare_saved_and_read(batch, loaded)
-        if not verdict["enough"]:
-            add("loaded_size", g=loaded.num_graphs, a=loaded.num_nodes, g2=batch.num_graphs, a2=batch.num_nodes)
-            return
-        for name in verdict["missing"]:
-            add("loaded_no_field", name=name)
-        for name in verdict["no_saved"]:
-            add("saved_no_field", name=name)
-        for name in verdict["differs"]:
-            add("loaded_differs", name=name)
-    elif step == "own_batch":
-        from nvalchemi.data.datapipes import AtomicDataZarrReader
+# ---------------------------------------------------------------------------
+# Running the files of a check
+# ---------------------------------------------------------------------------
+def _names_left_by(steps, ns: dict) -> dict:
+    """The names that the given steps left in the namespace, with their values."""
 
-        ob, oe, of, store = ns["own_batch"], ns["own_energy"], ns["own_forces"], ns["own_store"]
-        if not isinstance(ob, Batch):
-            add("own_batch_type", type=type(ob).__name__)
-            return
-        tensor_checks((("own_energy", oe, (ob.num_graphs, 1)), ("own_forces", of, (ob.num_nodes, 3))), "own_batch")
-        if not os.path.exists(str(store)):
-            add("store_path_missing", name="own_store", path=store)
-        else:
-            n = len(AtomicDataZarrReader(str(store)))
-            if n != ob.num_graphs:
-                add("store_count_own", n=n, m=ob.num_graphs)
+    return {name: ns[name] for earlier in steps for name in STEPS[earlier].names if name in ns}
+
+
+def _changed_names(step: str, file: str, before: dict, ns: dict) -> list[str]:
+    """One line for each name of ``before`` that ``file`` bound to another object."""
+
+    return [line("changed_name", step=step, file=file, name=name) for name, value in before.items() if ns.get(name) is not value]
+
+
+def _run_earlier_files(step: str, ns: dict, work: Path, problems: list[str]) -> str | None:
+    """Run the files of the earlier steps in notebook order; return the line of a required file that failed.
+
+    A "Try it" file runs only if it exists, and its errors are ignored here. It runs between the numbered
+    steps, so it must leave their names as they were: a later step would otherwise run on what it built.
+    """
+
+    order = list(STEPS)
+    for earlier in order[: order.index(step)]:
+        file = STEPS[earlier].file
+        if earlier in STEPS[step].after:
+            error = _run_file(ns, work, file)
+            if error is not None:
+                return line("earlier_failed", step=step, file=file, error=_first_line(error))
+        elif earlier in OPTIONAL_STEPS and (work / file).exists():
+            before = _names_left_by(STEPS[earlier].after, ns)
+            _run_file(ns, work, file)
+            problems.extend(_changed_names(step, file, before, ns))
+    return None
+
+
+def _run_step_file(step: str, ns: dict, work: Path) -> str | None:
+    """Run the file of the step twice, as a learner who runs the cell again; return the line of a failure."""
+
+    file = STEPS[step].file
+    for attempt in (1, 2):
+        error = _run_file(ns, work, file)
+        if error is None:
+            continue
+        name = getattr(error, "name", None) if isinstance(error, NameError) else None
+        if isinstance(error, FileExistsError):
+            return line("store_exists", step=step)
+        if name in NOT_IN_A_CELL:
+            return line("cell_only_name", step=step, file=file, name=name)
+        if name:
+            return line("name_error", step=step, file=file, name=name)
+        if attempt == 1:
+            return line("run_failed", step=step, file=file, error=_first_line(error))
+        return line("run_failed_second", step=step, file=file, error=_first_line(error))
+    return None
 
 
 def resolve_step(name: str) -> str:
@@ -359,53 +476,25 @@ def run_check(step: str, root: Path | None = None) -> int:
     ns: dict = {"__name__": "__main__"}
     exec(SETUP, ns)
     problems: list[str] = []
-    # earlier files in notebook order; the optional Try it file runs only if it exists, and its errors are ignored here
-    position = list(STEPS).index(step)
-    for earlier in list(STEPS)[:position]:
-        if earlier in STEPS[step].after:
-            error = _run_file(ns, work, STEPS[earlier].file)
-            if error is not None:
-                print(line("earlier_failed", step=step, file=STEPS[earlier].file, error=_first_line(error)))
-                return 1
-        elif earlier in OPTIONAL_STEPS and (work / STEPS[earlier].file).exists():
-            before = {name: ns[name] for e in STEPS[earlier].after for name in STEPS[e].names if name in ns}
-            _run_file(ns, work, STEPS[earlier].file)
-            # a Try it file that replaced an earlier name fails the later step too, which would otherwise run on it
-            # (validation, 26 Nov: with the first build_routes sample in place, `check model_call` passed on 50 structures)
-            for name, value in before.items():
-                if ns.get(name) is not value:
-                    problems.append(line("changed_name", step=step, file=STEPS[earlier].file, name=name))
-    # a "Try it" file runs between the numbered steps: it must leave their names as they were
-    # (the first sample of build_routes named its large batch `batch`, and the model call then ran on it)
-    kept = {name: ns[name] for earlier in STEPS[step].after for name in STEPS[earlier].names if name in ns} if step in OPTIONAL_STEPS else {}
-    for attempt in (1, 2):  # the second run is a learner running the cell again
-        error = _run_file(ns, work, STEPS[step].file)
-        if error is None:
-            continue
-        if isinstance(error, FileExistsError):
-            print(line("store_exists", step=step))
-        elif isinstance(error, NameError) and getattr(error, "name", None) in NOT_IN_A_CELL:
-            print(line("cell_only_name", step=step, file=STEPS[step].file, name=error.name))
-        elif isinstance(error, NameError) and getattr(error, "name", None):
-            print(line("name_error", step=step, file=STEPS[step].file, name=error.name))
-        elif attempt == 1:
-            print(line("run_failed", step=step, file=STEPS[step].file, error=_first_line(error)))
-            if os.environ.get("A02_TRACE"):
-                traceback.print_exception(error)
-        else:
-            print(line("run_failed_second", step=step, file=STEPS[step].file, error=_first_line(error)))
+    failure = _run_earlier_files(step, ns, work, problems)
+    if failure is not None:
+        print(failure)
         return 1
-    for name, value in kept.items():
-        if ns.get(name) is not value:
-            problems.append(line("changed_name", step=step, file=STEPS[step].file, name=name))
+    kept = _names_left_by(STEPS[step].after, ns) if step in OPTIONAL_STEPS else {}
+    failure = _run_step_file(step, ns, work)
+    if failure is not None:
+        print(failure)
+        return 1
+    problems.extend(_changed_names(step, STEPS[step].file, kept, ns))
     if _check_names(step, ns, problems):
         _check_content(step, ns, problems)
     for text in problems:
         print(text)
-    if not problems:
-        if step == "build_routes" and build_route_order(ns["build_table"])["status"] == "unexpected":
-            print(line("order_note", step=step))  # a note, not a failure: the step still passes (PROVISIONAL, a02q-order-line)
-            if not PROVISIONAL_UNEXPECTED_ORDER_PASSES:
-                return 1
-        print(line("ok", step=step, n=len(STEPS[step].names)))
-    return 1 if problems else 0
+    if problems:
+        return 1
+    if step == "build_routes" and build_route_order(ns["build_table"])["status"] == "unexpected":
+        print(line("order_note", step=step))  # a note; the switch in agent02_text.py decides whether the step still passes
+        if not PROVISIONAL_UNEXPECTED_ORDER_PASSES:
+            return 1
+    print(line("ok", step=step, n=len(STEPS[step].names)))
+    return 0

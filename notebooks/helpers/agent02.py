@@ -15,13 +15,13 @@ from .common import configure_tutorial as _configure_tutorial
 
 __all__ = [
     "MOLECULES",
+    "batch_rows_inputs",
     "configure_tutorial",
     "load_default_molecule",
     "load_default_set",
     "load_many",
     "load_molecule",
     "make_work_dir",
-    "batch_rows_inputs",
     "show_batch_rows",
     "show_build_routes",
     "show_fields",
@@ -121,7 +121,7 @@ def load_default_set() -> list[Atoms]:
 def load_many(n_structures: int = T.PROVISIONAL_N_STRUCTURES) -> list[Atoms]:
     """Return ``n_structures`` ASE structures: the five lesson molecules in turn, each copy slightly rattled.
 
-    Called without a number it returns the size the build-routes exercise was verified with (1,000, PROVISIONAL).
+    Called without a number it returns the size of the timing batch of the build-routes exercise (1,000).
     """
 
     import numpy as np
@@ -140,7 +140,7 @@ def load_many(n_structures: int = T.PROVISIONAL_N_STRUCTURES) -> list[Atoms]:
 
 
 # ---------------------------------------------------------------------------
-# Result views (the words are in agent02_text.py)
+# The views of the result cells (the words are in agent02_text.py)
 # ---------------------------------------------------------------------------
 def _tensor_of(value):
     import torch
@@ -181,6 +181,41 @@ def _atoms_of(data) -> Atoms:
     return _data_to_atoms(data)
 
 
+def _show_structure_card(atoms: Atoms) -> None:
+    """Show one structure as a rotatable 3D view."""
+
+    from IPython.display import HTML, display
+
+    from . import viewers, viewers_three
+
+    payload = viewers._structure_payload(atoms)
+    item = {"display_name": payload["formula"], **payload}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # IPython suggests IFrame for the viewer's srcdoc
+        display(HTML(viewers_three._card_iframe(viewers_three._structure_data(item, atoms), height=220)))
+
+
+def _field_rows(data) -> list[list[str]]:
+    """One row of the field table for each field that is set, and for the two the model call fills in."""
+
+    levels = {
+        level: set(data.__dict__.get(f"__{level}_keys__", ()))
+        for level in ("node", "edge", "system")
+    }
+    rows = []
+    for name in sorted(levels["node"] | levels["edge"] | levels["system"]):
+        tensor = _tensor_of(getattr(data, name, None))
+        level = next(lv for lv in ("node", "edge", "system") if name in levels[lv])
+        if tensor is not None:
+            rows.append(
+                [name, str(tuple(tensor.shape)), _unit(name, tensor.dtype), T.LEVEL_NAMES[level], _first_values(tensor), str(tensor.device)]
+            )
+        elif name in ("forces", "energy"):
+            shape = (data.num_nodes, 3) if name == "forces" else (1, 1)
+            rows.append([name, str(shape), T.UNITS[name], T.LEVEL_NAMES[level], T.NOT_SET, T.NO_DEVICE])
+    return rows
+
+
 def show_fields(data) -> None:
     """Show the fields of one AtomicData: a rotatable molecule and a field table.
 
@@ -190,32 +225,8 @@ def show_fields(data) -> None:
 
     from IPython.display import HTML, display
 
-    from . import viewers, viewers_three
-
-    atoms = _atoms_of(data)
-    payload = viewers._structure_payload(atoms)
-    item = {"display_name": payload["formula"], **payload}
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)  # IPython suggests IFrame for the viewer's srcdoc
-        display(HTML(viewers_three._card_iframe(viewers_three._structure_data(item, atoms), height=220)))
-    levels = {
-        level: set(data.__dict__.get(f"__{level}_keys__", ()))
-        for level in ("node", "edge", "system")
-    }
-    rows = []
-    for name in sorted(levels["node"] | levels["edge"] | levels["system"]):
-        tensor = _tensor_of(getattr(data, name, None))
-        level = next(lv for lv in ("node", "edge", "system") if name in levels[lv])
-        if tensor is None:
-            if name not in ("forces", "energy"):
-                continue
-            shape = (data.num_nodes, 3) if name == "forces" else (1, 1)
-            rows.append([name, str(shape), T.UNITS[name], T.LEVEL_NAMES[level], T.NOT_SET, T.NO_DEVICE])
-            continue
-        rows.append(
-            [name, str(tuple(tensor.shape)), _unit(name, tensor.dtype), T.LEVEL_NAMES[level], _first_values(tensor), str(tensor.device)]
-        )
-    display(HTML(_html_table(T.FIELD_HEADERS, rows)))
+    _show_structure_card(_atoms_of(data))
+    display(HTML(_html_table(T.FIELD_HEADERS, _field_rows(data))))
 
 
 def _formulas(batch) -> list[str]:
@@ -260,6 +271,50 @@ def show_batch_rows(batch) -> None:
     plt.close(figure)
 
 
+def _column_named(frame, word: str):
+    """The first column of a table whose name contains the word; None when there is none."""
+
+    return next((c for c in frame.columns if word in str(c).lower()), None)
+
+
+def _build_size_line(frame) -> str | None:
+    """The line that gives the size of the timing batch, when the table has a structures and an atoms column."""
+
+    import pandas as pd
+
+    structures, atoms, runs = (_column_named(frame, word) for word in ("structures", "atoms", "runs"))
+    if structures is None or atoms is None:
+        return None
+    first = frame.iloc[0]
+    text = T.BUILD_SIZE_LINE.format(structures=int(first[structures]), atoms=int(first[atoms]))
+    count = first[runs] if runs is not None else None
+    if pd.api.types.is_number(count) and count >= 1 and int(count) == count:  # a count of timed builds, not a time
+        text += T.BUILD_REPEATS_PART.format(runs=int(count))
+    return text + "."
+
+
+_OTHER_FIELD_WORDS = ("mass", "categor", "veloc", "charge", "cell", "pbc", "momen")  # fields beyond positions and atomic numbers
+
+
+def _tensor_route_fields_are_named(frame, tensor_row) -> bool:
+    """True when the table says that the route from tensors carries positions and atomic numbers only.
+
+    A fields column says so when it lists exactly those two. Without a fields column, the route's name
+    says so when it names positions and atomic numbers and no other field.
+    """
+
+    fields = _column_named(frame, "field")
+    if fields is not None:
+        listed = str(tensor_row[fields]).replace(",", " ").split()
+        return set(listed) == set(T.PROVISIONAL_TENSOR_FIELDS)
+    words = " ".join(str(v).lower() for v in tensor_row.values if isinstance(v, str))
+    return "position" in words and "atomic" in words and not any(w in words for w in _OTHER_FIELD_WORDS)
+
+
+def _build_time(seconds: float) -> str:
+    return f"{1e3 * seconds:.1f} ms" if seconds < 1 else f"{seconds:.2f} s"
+
+
 def show_build_routes(build_table) -> None:
     """Show the build_table of the build-routes exercise: the three routes, their times, what each tells you, the order check and the API."""
 
@@ -273,32 +328,16 @@ def show_build_routes(build_table) -> None:
         display(Markdown(T.CHECK_LINES["table_unnamed"].split(": ", 1)[1]))
         return
     frame = pd.DataFrame(build_table)
-    column = {kind: next((c for c in frame.columns if kind in str(c).lower()), None) for kind in ("structures", "atoms", "runs", "field")}
-    if column["structures"] is not None and column["atoms"] is not None:
-        first = frame.iloc[0]
-        size_line = T.BUILD_SIZE_LINE.format(structures=int(first[column["structures"]]), atoms=int(first[column["atoms"]]))
-        runs = first[column["runs"]] if column["runs"] is not None else None
-        if pd.api.types.is_number(runs) and runs >= 1 and int(runs) == runs:  # a count of timed builds, not a time
-            size_line += T.BUILD_REPEATS_PART.format(runs=int(runs))
-        display(Markdown(size_line + "."))
-    # the tensor route's name says which fields it carries only when the table says so: a fields column that lists
-    # exactly those, or, without one, a route name that names positions and atomic numbers
-    # (validation, 26 Nov: a trial's tensor route carried five fields and its table had no fields column)
-    tensor_row = frame.iloc[verdict["rows"]["tensors"]]
-    if column["field"] is not None:
-        listed = str(tensor_row[column["field"]]).replace(",", " ").split()
-        tensor_fields_as_planned = set(listed) == set(T.PROVISIONAL_TENSOR_FIELDS)
-    else:
-        words = " ".join(str(v).lower() for v in tensor_row.values if isinstance(v, str))
-        others = ("mass", "categor", "veloc", "charge", "cell", "pbc", "momen")  # a name that lists more fields gets no mark
-        tensor_fields_as_planned = "position" in words and "atomic" in words and not any(w in words for w in others)
+    size_line = _build_size_line(frame)
+    if size_line is not None:
+        display(Markdown(size_line))
+    fields_are_named = _tensor_route_fields_are_named(frame, frame.iloc[verdict["rows"]["tensors"]])
     rows = []
     for role in BUILD_ORDER:
         label, meaning = T.BUILD_ROUTE_TEXT[role]
-        if role == "tensors" and tensor_fields_as_planned:
+        if role == "tensors" and fields_are_named:
             label += T.BUILD_TENSOR_FIELDS_MARK.format(words=T.PROVISIONAL_TENSOR_FIELDS_WORDS)
-        seconds = verdict["times"][role]
-        shown = f"{1e3 * seconds:.1f} ms" if seconds < 1 else f"{seconds:.2f} s"
+        shown = _build_time(verdict["times"][role])
         if role in verdict["marked"]:
             shown += T.BUILD_UNEXPECTED_MARK
         rows.append([label, shown, meaning])
@@ -308,23 +347,31 @@ def show_build_routes(build_table) -> None:
     display(Markdown(T.BUILD_API_BOX))
 
 
+def _largest_forces(forces, batch_idx, n_structures: int):
+    """The largest force magnitude on an atom, for each structure of a batch."""
+
+    import torch
+
+    norms = forces.detach().float().norm(dim=1)  # per-atom force magnitude
+    owner = batch_idx.to(norms.device)
+    return torch.zeros(n_structures, device=norms.device).scatter_reduce(0, owner, norms, reduce="amax", include_self=False)
+
+
 def show_results(batch, energy, forces) -> None:
     """Show one row per molecule: atoms, energy in eV and largest force in eV/Å."""
 
-    import torch
     from IPython.display import HTML, display
 
     counts = batch.num_nodes_per_graph.cpu().tolist()
-    norms = forces.detach().float().norm(dim=1)  # per-atom force magnitude
-    owner = batch.batch_idx.to(norms.device)
-    largest = torch.zeros(len(counts), device=norms.device).scatter_reduce(
-        0, owner, norms, reduce="amax", include_self=False
-    )
+    largest = _largest_forces(forces, batch.batch_idx, len(counts))
     rows = [
         [i, formula, counts[i], f"{energy.reshape(-1)[i].item():.3f}", f"{largest[i].item():.3f}"]
         for i, formula in enumerate(_formulas(batch))
     ]
     display(HTML(_html_table(T.RESULTS_HEADERS, rows)))
+
+
+_STORE_LEVELS = {"atom": "node", "edge": "edge", "system": "system"}  # a level as the store names it -> as AtomicData names it
 
 
 def show_store(store_path, batch=None, loaded_batch=None) -> None:
@@ -342,17 +389,16 @@ def show_store(store_path, batch=None, loaded_batch=None) -> None:
     if batch is None and loaded_batch is None:
         _show_store_structures(store_path)
         return
-    rows = []
-    for name, field in sorted(reader.schema().items()):
-        rows.append(
-            [
-                name,
-                T.LEVEL_NAMES.get({"atom": "node", "edge": "edge", "system": "system"}.get(field.level, ""), field.level),
-                str((sizes.get(field.level, "?"), *field.row_shape)),
-                _unit(name, field.dtype),
-                str(field.dtype).replace("torch.", ""),
-            ]
-        )
+    rows = [
+        [
+            name,
+            T.LEVEL_NAMES.get(_STORE_LEVELS.get(field.level, ""), field.level),
+            str((sizes.get(field.level, "?"), *field.row_shape)),
+            _unit(name, field.dtype),
+            str(field.dtype).replace("torch.", ""),
+        ]
+        for name, field in sorted(reader.schema().items())
+    ]
     display(HTML(_html_table(T.STORE_HEADERS, rows)))
     if batch is not None and loaded_batch is not None:
         from .agent02_checks import compare_saved_and_read
@@ -364,15 +410,13 @@ def show_store(store_path, batch=None, loaded_batch=None) -> None:
 def _show_store_structures(store_path) -> None:
     """One row per structure of a store: atoms, energy and largest force."""
 
-    import torch
     from IPython.display import HTML, display
     from nvalchemi.data.datapipes import AtomicDataZarrReader, Dataset
 
     dataset = Dataset(AtomicDataZarrReader(str(store_path)), device="cpu")
     loaded = dataset.load_batches([list(range(len(dataset)))])[0]
     counts = loaded.num_nodes_per_graph.cpu().tolist()
-    norms = loaded.forces.float().norm(dim=1)
-    largest = torch.zeros(len(counts)).scatter_reduce(0, loaded.batch_idx.cpu(), norms.cpu(), reduce="amax", include_self=False)
+    largest = _largest_forces(loaded.forces, loaded.batch_idx, len(counts))
     rows = [[i, counts[i], f"{loaded.energy.reshape(-1)[i].item():.3f}", f"{largest[i].item():.3f}"] for i in range(len(counts))]
     display(HTML(_html_table(T.STORE_PER_STRUCTURE_HEADERS, rows)))
 

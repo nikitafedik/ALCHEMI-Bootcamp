@@ -141,3 +141,70 @@ def test_module_three_storyboard_keeps_two_md_stage_routes_comparable() -> None:
 
     assert fixed_batch_steps == fused_batch_steps
     assert 1.45 <= inflight_speedup <= 1.55
+
+
+def test_configure_tutorial_filters_the_torch_jit_deprecation_notice() -> None:
+    import warnings
+
+    from helpers import common
+
+    with warnings.catch_warnings():
+        common._ignore_torch_jit_deprecation()
+        rule = warnings.filters[0]
+        assert rule[0] == "ignore" and rule[2] is DeprecationWarning
+        assert rule[1].match("`torch.jit.load` is deprecated. Please switch to `torch.export`.")
+        assert rule[3].match("torch.jit._serialization")
+        assert not rule[1].match("`torch.compile` is deprecated")
+
+
+def test_mace_load_guard_drops_the_torch_jit_notice_behind_a_once_rule(monkeypatch) -> None:
+    """cuEquivariance runs ``warnings.simplefilter("once")`` at import, in front of the course
+    filters; the guard still drops torch's jit notice and shows every other warning."""
+
+    import warnings
+
+    from helpers.model_support import suppress_known_mace_load_noise
+
+    notice = "`torch.jit.load` is deprecated. Please switch to `torch.export`."
+    own = notice.replace("load", "script_method")
+    jit_file = "/venv/lib/python3.12/site-packages/torch/jit/_serialization.py"
+    shown: list[tuple[str, type, str]] = []
+    monkeypatch.setattr(
+        warnings,
+        "showwarning",
+        lambda message, category, filename, lineno, file=None, line=None: shown.append(
+            (str(message), category, filename)
+        ),
+    )
+    with warnings.catch_warnings():
+        with suppress_known_mace_load_noise():
+            warnings.simplefilter("once")  # what the cuEquivariance import does
+            warnings.warn_explicit(notice, DeprecationWarning, jit_file, 176)
+            warnings.warn_explicit(notice.replace("load", "script"), DeprecationWarning, jit_file, 1488)
+            # a "once" rule shows a text once, so the learner's own call uses a third text
+            warnings.warn_explicit(own, DeprecationWarning, "/my/code.py", 3)
+            warnings.warn_explicit("something the learner should read", UserWarning, "/lib/other.py", 5)
+    assert shown == [
+        (own, DeprecationWarning, "/my/code.py"),
+        ("something the learner should read", UserWarning, "/lib/other.py"),
+    ]
+
+
+def test_mace_load_guard_shows_recorded_warnings_when_the_load_fails(monkeypatch) -> None:
+    import warnings
+
+    import pytest
+    from helpers.model_support import suppress_known_mace_load_noise
+
+    shown: list[str] = []
+    monkeypatch.setattr(
+        warnings,
+        "showwarning",
+        lambda message, category, filename, lineno, file=None, line=None: shown.append(str(message)),
+    )
+    with warnings.catch_warnings(), pytest.raises(RuntimeError):
+        with suppress_known_mace_load_noise():
+            warnings.simplefilter("always")
+            warnings.warn_explicit("checkpoint looks odd", UserWarning, "/lib/other.py", 5)
+            raise RuntimeError("load failed")
+    assert shown == ["checkpoint looks odd"]

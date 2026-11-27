@@ -1,9 +1,8 @@
 # Agent 01, Meet your agent: the default prompt of each step
 
 The typical learner prompt for each step, written from the step's text and
-table alone and tried with a fresh mid-tier agent (Sonnet) that had only the
-prompt, the session lines and the skill path. Records:
-`notes/evidence/agent-01-meet/` (outside the repository).
+table alone. Each was tried with a fresh mid-tier agent that had only the
+prompt, the session lines and the skill path.
 
 ## first_prompt ("4. Your first prompt")
 

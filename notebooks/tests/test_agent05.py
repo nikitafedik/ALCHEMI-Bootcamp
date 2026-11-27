@@ -240,3 +240,40 @@ def test_configure_tutorial_silences_the_torchmdnet_checkpoint_notice_in_kernel_
     assert result.returncode == 0, result.stderr
     assert "Old-format checkpoint" not in result.stderr
     assert "another notice" in result.stderr  # the filter is narrow: other notices still print
+
+
+def test_configure_tutorial_drops_the_hub_token_notice_and_keeps_other_hub_lines():
+    """The Hub sends "You are sending unauthenticated requests to the HF Hub" with the first download;
+    huggingface_hub logs it on the logger huggingface_hub.utils._http. Only that line is dropped."""
+
+    import logging
+
+    logger = logging.getLogger("huggingface_hub.utils._http")
+    before = list(logger.filters)  # an earlier test may have run configure_tutorial already
+    logger.filters[:] = [rule for rule in before if not isinstance(rule, agent05._HubTokenNotice)]
+    start = len(logger.filters)
+    seen = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            seen.append(record.getMessage())
+
+    handler = Collect()
+    logger.addHandler(handler)
+    try:
+        agent05.configure_tutorial()
+        agent05.configure_tutorial()  # a second call adds no second filter
+        assert len(logger.filters) == start + 1
+        logger.warning(
+            "Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN "
+            "to enable higher rate limits and faster downloads."
+        )
+        logger.warning("Warning: this repository moved")
+        logger.error("You are sending unauthenticated requests to the HF Hub and the download failed")
+    finally:
+        logger.removeHandler(handler)
+        logger.filters[:] = before
+    assert seen == [
+        "Warning: this repository moved",
+        "You are sending unauthenticated requests to the HF Hub and the download failed",
+    ]

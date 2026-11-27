@@ -44,7 +44,7 @@ def make_work_dir() -> Path:
     return WORK_DIR
 
 
-make_work_dir()
+make_work_dir()  # the folder exists as soon as the helpers are imported, before the setup cell runs
 
 
 def configure_tutorial() -> None:

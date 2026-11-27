@@ -13,5 +13,4 @@
 | model fit | H, C, N, O are among the elements of the AIMNet2 checkpoint; `AIMNet2Wrapper` gives -18517.4883 eV (the wrapper leaves out Coulomb and D3) |
 
 The geometry is a force-field conformer: fit for one model call and a 3D
-view, and no reference structure. The build script and the verification
-record are kept with the course notes, outside the repository.
+view, and no reference structure. The "how built" row is the full recipe.

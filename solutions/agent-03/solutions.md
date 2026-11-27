@@ -48,7 +48,13 @@ Notes on the samples:
   its own temperature. It returns the energy per atom; the first row is the
   crystal before the first step. Its step count is provisional until the
   two-minute measurement on the course GPU.
-- `speed_settings.py` times 30 L-BFGS steps on all crystals: a first run on a
-  freshly loaded model and the median of three repeats, for each of the four
-  cases. cuEquivariance needs a CUDA GPU, so this file runs on the course GPU
-  only.
+- `speed_settings.py` times 10 L-BFGS steps on 50 crystals picked evenly from
+  `crystal_batch` (2,184 atoms of 8,722): a first run on a freshly loaded
+  model and the median of three repeats, for each of the four cases, all on
+  the same 50 crystals. It prints the size it timed. Without cuEquivariance
+  the model needs about 36 GB for all 200 crystals; on the 48 GB L40S that
+  run fails with "out of memory" after the earlier steps, even once their
+  memory is handed back (measured 27 Nov 2026). The 50 crystals need about
+  10 GB. A case that fails keeps its row,
+  with the reason in `note`. cuEquivariance needs a CUDA GPU, so this file
+  runs on the course GPU only.

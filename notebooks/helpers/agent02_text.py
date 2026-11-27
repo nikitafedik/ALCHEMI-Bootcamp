@@ -3,36 +3,33 @@
 
 """Every line a learner reads from the helpers and the step checks of notebook 02, in one place.
 
-All of it is DRAFT: the wording waits for the educator (board questions a01-check-messages,
-a02q-table-wording, a02q-tensor-phrase, a02q-order-line, a02q-build-checklines,
-a02q-build-checklines2, defaults-hint-form). A swap is an edit in this file only.
-``notes/builder-02/check_messages.md`` lists these lines and a test keeps the two together.
+The helper (``agent02.py``) and the step checks (``agent02_checks.py``) take their words from here,
+so a change of wording is an edit in this file only.
 """
 
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# PROVISIONAL (owner of notebook 02, 2026-11-26). The educator's open decisions on the build-routes
-# "Try it", each set to the advisor's recommendation. This block is the one place to switch them:
-# the helper, the step check, the tests and ``make_check_messages.py`` read these names.
+# The choices of "Try it: CPU first, or straight to the GPU" (the build_routes step). This block is
+# the one place to change them: the helper, the step check and the tests read these names.
 # The sample file ``solutions/agent-02/build_routes.py`` repeats the size, the warm-up and the
 # repeats as plain numbers (a learner's file cannot import this module); a test keeps them equal.
 # ---------------------------------------------------------------------------
-# [a02q-build-routes] option A: "Try it: CPU first, or straight to the GPU" REPLACES "Try it: a batch
-# of your choice" (31 cells; steps 1 to 6 end with zarr_roundtrip). False: a third Try it (34 cells).
+# True: build_routes takes the place of "Try it: a batch of your choice" (the own_batch step), and the
+# numbered steps 1 to 6 end with zarr_roundtrip. False: own_batch is numbered too, as step 7.
+# The check of own_batch runs by name either way.
 PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH = True
-# [a02q-build-result] option B: 1,000 structures, one warm-up build, the best of five timed builds.
+# The timing batch: 1,000 structures, one warm-up build, the best of five timed builds.
 PROVISIONAL_N_STRUCTURES = 1000
 PROVISIONAL_WARMUPS = 1
 PROVISIONAL_TIMED_RUNS = 5
-# [a02q-tensor-phrase] option C: the note of the tensor row. It replaces the earlier ending of that
-# note, which the educator rejected on 26 Nov.
+# What the result table says about the route from tensors.
 PROVISIONAL_TENSOR_NOTE = "quicker still, but nothing is filled in or checked for you"
-# [a02q-tensor-fields] option B: the tensor route carries these two fields only, and the table says so.
+# The route from tensors carries these two fields only, and the table says so.
 PROVISIONAL_TENSOR_FIELDS = ("positions", "atomic_numbers")
 PROVISIONAL_TENSOR_FIELDS_WORDS = "positions and atomic numbers only"
-# [a02q-order-line] option A: an order other than tensors < CPU then moved < directly on the GPU is
-# marked "unexpected" and the step passes. False: the order line fails the step.
+# True: an order other than tensors < CPU then moved < directly on the GPU is marked "unexpected"
+# and the step passes. False: that order fails the step.
 PROVISIONAL_UNEXPECTED_ORDER_PASSES = True
 
 # ---------------------------------------------------------------------------
@@ -86,8 +83,7 @@ STORE_DIFFERS = "read back differs from saved"
 # ---------------------------------------------------------------------------
 # show_build_routes(build_table): the build-routes result and its explanation
 # ---------------------------------------------------------------------------
-# The three row notes of the table: (route, what it tells you). None is approved (a02q-table-wording,
-# a02q-tensor-phrase). Every unapproved row note of the build-routes table is here and nowhere else.
+# The three rows of the table: route -> (its name, what it tells you).
 BUILD_ROUTE_TEXT = {
     "tensors": ("from tensors", PROVISIONAL_TENSOR_NOTE),
     "cpu_then_moved": ("from objects on the CPU, then moved", "the fastest route from objects: one move"),
@@ -123,7 +119,7 @@ CHECK_LINES = {
     "run_failed_second": "{step}: running {file} a second time failed: {error}",
     "store_exists": "{step}: a store already exists at the path the file writes to; use a fresh path or remove the old store first",
     "name_error": "{step}: {file} uses {name}, which is not defined in an earlier file; define it in this file",
-    "cell_only_name": "{step}: {file} uses {name}, which does not exist in a notebook cell; remove that line",  # __file__ (revision 26 Nov, B)
+    "cell_only_name": "{step}: {file} uses {name}, which does not exist in a notebook cell; remove that line",  # __file__
     "file_missing": "agent02_work/{file} not found",
     "changed_name": "{step}: {file} changed {name}, which the later steps use; give what you build here another name",
     # atomic_data

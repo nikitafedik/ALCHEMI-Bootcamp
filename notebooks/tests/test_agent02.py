@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -19,13 +18,11 @@ sys.path.insert(0, str(_NOTEBOOK_DIR))
 from helpers import agent02, agent02_checks
 from helpers import agent02_text as T
 
-# A02_NOTEBOOK points the notebook tests at another copy (revision 26 Nov: the candidate, before it is promoted)
-NOTEBOOK = Path(os.environ.get("A02_NOTEBOOK") or _NOTEBOOK_DIR / "alchemi-agent-02-data-and-batching.ipynb")
+NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-02-data-and-batching.ipynb"
 
-# steps that have a check but no cells in the notebook: build_routes while it waits for the educator (a02q-build-routes);
-# once its cells are in, the step it replaces (own_batch, PROVISIONAL switch in agent02_text.py)
-_HAS_BUILD_ROUTES = "agent02_work/build_routes.py" in NOTEBOOK.read_text()
-NOT_IN_NOTEBOOK_YET = {"own_batch"} if _HAS_BUILD_ROUTES and T.PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH else {"build_routes"}
+# The step that has a check but no cells in the notebook: own_batch, while build_routes takes its place
+# (the switch in agent02_text.py)
+NOT_IN_NOTEBOOK = {"own_batch"} if T.PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH else set()
 
 
 def _cells() -> list[dict]:
@@ -45,7 +42,7 @@ def _tables() -> dict[str, list[str]]:
 
 def test_every_table_matches_its_contract():
     tables = _tables()
-    assert set(tables) | NOT_IN_NOTEBOOK_YET == set(agent02_checks.STEPS)
+    assert set(tables) | NOT_IN_NOTEBOOK == set(agent02_checks.STEPS)
     for step, names in tables.items():
         assert tuple(names) == agent02_checks.STEPS[step].names, step
 
@@ -56,23 +53,22 @@ def test_load_cells_name_the_contract_files():
         for c in _cells()
         if c["cell_type"] == "code" and "".join(c["source"]).startswith("%load")
     ]
-    assert loads == [agent02_checks.STEPS[s].file for s in agent02_checks.STEPS if s not in NOT_IN_NOTEBOOK_YET]
+    assert loads == [agent02_checks.STEPS[s].file for s in agent02_checks.STEPS if s not in NOT_IN_NOTEBOOK]
 
 
-def test_setup_cell_has_the_four_planned_lines():
+def test_setup_cell_has_the_five_planned_lines():
     setup = next("".join(c["source"]) for c in _cells() if "make_work_dir" in "".join(c["source"]))
     lines = [ln.split("#")[0].strip() for ln in setup.splitlines()]
     planned = [
         "from helpers import agent02 as helpers",
         "helpers.configure_tutorial()",
         "work_dir = helpers.make_work_dir()",
+        f"n_structures = {T.PROVISIONAL_N_STRUCTURES}",  # the input row of build_routes names it
         "helpers.show_session()",
     ]
-    if _HAS_BUILD_ROUTES:  # its input row names n_structures (revision 26 Nov)
-        planned.insert(3, f"n_structures = {T.PROVISIONAL_N_STRUCTURES}")
     assert lines == planned
     # the check runs the same setup, without the line that only prints
-    assert [ln for ln in agent02_checks.SETUP.splitlines()] == [ln for ln in planned if ln != "helpers.show_session()"] or not _HAS_BUILD_ROUTES
+    assert agent02_checks.SETUP.splitlines() == [ln for ln in planned if ln != "helpers.show_session()"]
 
 
 def test_check_setup_defines_n_structures_as_the_provisional_size(tmp_path, monkeypatch, capsys):
@@ -137,7 +133,7 @@ def test_check_accepts_names_paths_and_numbers(tmp_path, capsys):
     for spelled, expected in (("2", "batch"), ("batch", "batch"), ("batch.py", "batch"), ("agent02_work/batch.py", "batch")):
         assert agent02_checks.resolve_step(spelled) == expected
     assert agent02_checks.resolve_step("99") == "99"
-    # PROVISIONAL (a02q-build-routes): build_routes replaces own_batch, so step 4 is build_routes and step 6 the store
+    # while build_routes takes the place of own_batch, step 4 is build_routes and step 6 the store
     if T.PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH:
         assert [agent02_checks.resolve_step(str(n)) for n in range(1, 8)] == ["atomic_data", "batch", "my_batch", "build_routes", "model_call", "zarr_roundtrip", "7"]
     else:
@@ -236,7 +232,7 @@ def test_build_route_order_usual_unexpected_and_unnamed():
 
 
 def test_unexpected_order_is_a_note_and_the_check_still_passes(tmp_path, monkeypatch, capsys):
-    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pandas")
     monkeypatch.setattr(agent02_checks, "STEPS", {
         "a": agent02_checks.Step("a.py", ("x",)),
         "build_routes": agent02_checks.Step("build_routes.py", ("build_table",), after=("a",)),
@@ -286,7 +282,7 @@ def test_saved_defaults_load_and_fit_the_model_elements():
 
 
 # ---------------------------------------------------------------------------
-# Owner round: any molecule order, an appended store, the field table, the text module
+# Any molecule order, an appended store, the field table, the text module
 # ---------------------------------------------------------------------------
 def _five_batch():
     pytest.importorskip("rdkit")
@@ -369,8 +365,6 @@ def test_field_table_has_a_unit_for_every_row_and_the_two_structure_and_atom_row
 
 
 def test_every_check_line_is_used_and_every_used_line_exists():
-    import re
-
     source = (Path(agent02_checks.__file__)).read_text()
     used = set(re.findall(r'(?:line|add)\("([a-z_0-9]+)"', source))
     assert used <= set(T.CHECK_LINES), used - set(T.CHECK_LINES)
@@ -391,19 +385,19 @@ def test_batch_check_accepts_any_order_of_the_five_molecules(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# Takeover round (26 Nov): the provisional choices, the sample of build_routes, names a Try it must keep
+# The choices of the build-routes exercise, its sample, and the names a Try it must keep
 # ---------------------------------------------------------------------------
 _SAMPLES = _NOTEBOOK_DIR.parent / "solutions" / "agent-02"
 
 
-def test_provisional_choices_are_what_the_task_names():
+def test_provisional_choices_have_their_current_values():
     assert T.PROVISIONAL_BUILD_ROUTES_REPLACES_OWN_BATCH is True
     assert (T.PROVISIONAL_N_STRUCTURES, T.PROVISIONAL_WARMUPS, T.PROVISIONAL_TIMED_RUNS) == (1000, 1, 5)
     assert T.BUILD_ROUTE_TEXT["tensors"][1] == "quicker still, but nothing is filled in or checked for you"
     assert T.PROVISIONAL_TENSOR_FIELDS == ("positions", "atomic_numbers")
     assert T.PROVISIONAL_UNEXPECTED_ORDER_PASSES is True
     everything = Path(T.__file__).read_text() + Path(agent02.__file__).read_text() + Path(agent02_checks.__file__).read_text()
-    assert "the fields to you" not in everything  # the phrase the educator rejected
+    assert "the fields to you" not in everything  # this wording is not used
 
 
 def test_build_routes_sample_follows_the_provisional_size_and_runs_without_a_gpu():

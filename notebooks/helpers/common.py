@@ -69,6 +69,21 @@ def _ignore_known_aimnet2_cutoff_warning() -> None:
     )
 
 
+def _ignore_torch_jit_deprecation() -> None:
+    """Ignore torch's notice that ``torch.jit`` is deprecated.
+
+    The pinned model packages load TorchScript modules on a GPU; the notice says
+    nothing about the learner's run.
+    """
+
+    warnings.filterwarnings(
+        "ignore",
+        message=r"`torch\.jit\.(script|script_method|load)` is deprecated.*",
+        category=DeprecationWarning,
+        module=r"torch\.jit\.",
+    )
+
+
 def register_course_fonts() -> list[str]:
     """Register the fonts shipped in ``shared/fonts`` with Matplotlib; return their family names.
 
@@ -103,6 +118,7 @@ def configure_tutorial() -> None:
     import matplotlib.pyplot as plt
 
     _ignore_known_aimnet2_cutoff_warning()
+    _ignore_torch_jit_deprecation()
     warnings.filterwarnings(
         "ignore",
         message=r'install "ipywidgets".*',

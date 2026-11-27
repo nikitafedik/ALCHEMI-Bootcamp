@@ -9,7 +9,7 @@ One learner-written step, two sample files for it.
 
 `first_prompt.py` is the file a fresh agent wrote for the prompt "compute the
 energy of caffeine with aimnet2; give me my_molecule and my_energy, in
-first_prompt.py" (trial A, 2026-11-25). It builds caffeine from a SMILES string
+first_prompt.py". It builds caffeine from a SMILES string
 with RDKit and calls AIMNet2 once. Energy: -18517.4883 eV, the same on the
 course GPU and on CPU. The learner picks their own molecule, so their file and
 their number differ.

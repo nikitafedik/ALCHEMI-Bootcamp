@@ -22,6 +22,7 @@ import os
 import sys
 import time
 import traceback
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -66,8 +67,15 @@ def _quiet_mace_default_line() -> None:
         # notice does not describe the learner's run, so import inside the course's filter.
         from .model_support import suppress_known_mace_load_noise
 
-        with suppress_known_mace_load_noise():
+        # The same import loads cuequivariance_ops_torch, which runs warnings.simplefilter("once") and
+        # then calls torch.jit.script: its rule sits in front of every course filter at that moment, so
+        # torch's "`torch.jit.script` is deprecated" notice printed in the setup cell (L40S run,
+        # 27 Nov). Record the import's warnings, drop that notice by message and module, show the rest.
+        with suppress_known_mace_load_noise(), warnings.catch_warnings(record=True) as caught:
             from mace.calculators import foundations_models
+        for warning in caught:
+            if not _is_torch_jit_notice(warning):
+                warnings.showwarning(warning.message, warning.category, warning.filename, warning.lineno)
     except Exception:  # without MACE there is no line to drop
         return
     original = foundations_models.download_mace_mp_checkpoint
@@ -88,11 +96,45 @@ def _quiet_mace_default_line() -> None:
     foundations_models.download_mace_mp_checkpoint = quiet
 
 
+def _is_torch_jit_notice(warning) -> bool:
+    """True for torch's "`torch.jit.script` is deprecated" notice raised inside torch/jit."""
+
+    return (
+        issubclass(warning.category, DeprecationWarning)
+        and str(warning.message).startswith("`torch.jit.")
+        and "/torch/jit/" in str(warning.filename).replace(os.sep, "/")
+    )
+
+
+def _ignore_speed_step_notices() -> None:
+    """Ignore two library notices the speed step printed (L40S run, 27 Nov), each by message and module.
+
+    MACE warns "To copy construct from a tensor ..." each time a model is converted to cuEquivariance,
+    and torch.compile warns that TensorFloat32 is available but not enabled. Neither describes the
+    learner's run. Call this after the mace import, so the rules land in front of the "once" rules
+    that Toolkit and cuEquivariance set when they are imported.
+    """
+
+    warnings.filterwarnings(
+        "ignore",
+        message=r"To copy construct from a tensor.*",
+        category=UserWarning,
+        module=r"mace\.modules\.models",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled.*",
+        category=UserWarning,
+        module=r"torch\._inductor\.compile_fx",
+    )
+
+
 def configure_tutorial() -> None:
-    """Apply the course style (light only) and drop MACE's repeated default-model line."""
+    """Apply the course style (light only), drop MACE's repeated default-model line and three library notices."""
 
     _configure_tutorial()
     _quiet_mace_default_line()
+    _ignore_speed_step_notices()
 
 
 # The work folder. ALCHEMI_AGENT03_WORK names another one (the tests and the CPU proof use it).

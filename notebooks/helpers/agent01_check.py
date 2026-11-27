@@ -22,9 +22,7 @@ energy more than 1 eV from the bare AIMNet2 value adds an "unexpected" line
 from __future__ import annotations
 
 import math
-import os
 import sys
-import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,31 +36,30 @@ SETUP_CELL = (
 )
 
 # Every line the check can print, in one place. The wording is content: the
-# learner's agent reads these lines and the learner may see them. Numbers are
-# those of notes/evidence/agent-01-meet/check-messages.md. Lines 4 to 13 and 17
-# are printed after "{step}: ".
+# learner's agent reads these lines and the learner may see them. The lines
+# about my_molecule, my_energy and the model are printed after "{step}: ".
 MESSAGES = {
-    "not_found": "{work}/{file} not found",  # 1, inside "run_failed"
-    "run_failed": "{step}: running {file} failed: {error}",  # 1, 2
-    "rerun_failed": "{step}: running {file} a second time failed: {error}",  # 3
-    "missing": "{step}: {name} is missing; the step asks for it",  # 4, 5
-    "molecule_batch": "my_molecule is a Batch of {n}; it should be one structure (ASE Atoms or AtomicData)",  # 6
-    "molecule_type": "my_molecule is {type}; it should be one structure (ASE Atoms or AtomicData)",  # 7
-    "molecule_empty": "my_molecule has no atoms",  # 8
-    "molecule_nan": "my_molecule has positions that are not finite",  # 9
-    "molecule_show": "my_molecule cannot be shown: {error}",  # 10
-    "energy_type": "my_energy is {type}; it should be one number in eV",  # 11
-    "energy_shape": "my_energy has shape {shape}; one molecule has one energy in eV",  # 12
-    "energy_nan": "my_energy is {value}; it should be a finite number in eV",  # 13
-    "ok": "{step}: OK ({n} names)",  # 14
-    "unknown_step": "unknown step {step}; steps: {steps}",  # 15
-    "earlier_failed": "{step}: an earlier file failed: {file}: {error}",  # 16
-    "model_fit": (  # 17, draft
+    "not_found": "{work}/{file} not found",  # the {error} of "run_failed"
+    "run_failed": "{step}: running {file} failed: {error}",
+    "rerun_failed": "{step}: running {file} a second time failed: {error}",
+    "missing": "{step}: {name} is missing; the step asks for it",
+    "molecule_batch": "my_molecule is a Batch of {n}; it should be one structure (ASE Atoms or AtomicData)",
+    "molecule_type": "my_molecule is {type}; it should be one structure (ASE Atoms or AtomicData)",
+    "molecule_empty": "my_molecule has no atoms",
+    "molecule_nan": "my_molecule has positions that are not finite",
+    "molecule_show": "my_molecule cannot be shown: {error}",
+    "energy_type": "my_energy is {type}; it should be one number in eV",
+    "energy_shape": "my_energy has shape {shape}; one molecule has one energy in eV",
+    "energy_nan": "my_energy is {value}; it should be a finite number in eV",
+    "ok": "{step}: OK ({n} names)",
+    "unknown_step": "unknown step {step}; steps: {steps}",
+    "earlier_failed": "{step}: an earlier file failed: {file}: {error}",
+    "model_fit": (
         "the model is MACE-MPA-0 ({checkpoint}), a model for materials; "
         "a molecule needs a model for molecules, such as AIMNet2"
     ),
-    "script_name": "{step}: {file} uses {name}, which does not exist in a notebook cell; remove that line",  # 18
-    "unexpected_energy": (  # 19, draft (revision 26 Nov)
+    "script_name": "{step}: {file} uses {name}, which does not exist in a notebook cell; remove that line",
+    "unexpected_energy": (
         "{step}: unexpected: my_energy is {value:.4f}; AIMNet2 as Toolkit ships it gives {saved:.4f} eV "
         "for the default molecule (the step still passes)"
     ),
@@ -74,6 +71,8 @@ _SCRIPT_NAMES = {"__file__"}  # names a script has and a notebook cell does not
 
 @dataclass(frozen=True)
 class Step:
+    """One step of the notebook: its file, the names the file leaves, and the steps whose files run first."""
+
     file: str
     names: tuple[str, ...]
     after: tuple[str, ...] = field(default=())
@@ -282,8 +281,6 @@ def run_check(step: str, root: Path | None = None) -> int:
             print(MESSAGES["script_name"].format(step=step, file=STEPS[step].file, name=error.name))
         elif attempt == 1:
             print(MESSAGES["run_failed"].format(step=step, file=STEPS[step].file, error=_first_line(error)))
-            if os.environ.get("A01_TRACE"):
-                traceback.print_exception(error)
         else:
             print(MESSAGES["rerun_failed"].format(step=step, file=STEPS[step].file, error=_first_line(error)))
         return 1

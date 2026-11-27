@@ -1725,3 +1725,44 @@ def test_configure_tutorial_drops_only_the_mace_default_model_line(monkeypatch, 
     out = capsys.readouterr().out
     assert "Using medium MPA-0 model" not in out
     assert out == "Cached MACE model to /tmp/x\n"
+
+
+def test_configure_tutorial_ignores_the_speed_step_notices_by_message_and_module(monkeypatch):
+    """The two notices of the speed step (L40S run, 27 Nov) are ignored; other warnings of the same modules show."""
+
+    import warnings
+
+    monkeypatch.setattr(agent03, "_configure_tutorial", lambda: None)
+    copy_notice = "To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone()"
+    tf32_notice = (
+        "TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. "
+        "Consider setting `torch.set_float32_matmul_precision('high')` for better performance."
+    )
+
+    def shown(message, module):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.warn_explicit(message, UserWarning, "x.py", 1, module=module, registry={})
+        return [str(w.message) for w in caught]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        agent03.configure_tutorial()
+        assert shown(copy_notice, "mace.modules.models") == []
+        assert shown(tf32_notice, "torch._inductor.compile_fx") == []
+        assert shown("something else", "mace.modules.models") == ["something else"]
+        assert shown(copy_notice, "my_own_code") == [copy_notice]
+        assert shown(tf32_notice, "my_own_code") == [tf32_notice]
+
+
+def test_torch_jit_notice_is_matched_by_message_and_place():
+    import warnings
+
+    def record(message, category, filename):
+        return warnings.WarningMessage(message, category, filename, 1)
+
+    notice = "`torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`."
+    jit_file = "/venv/lib/python3.12/site-packages/torch/jit/_script.py"
+    assert agent03._is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, jit_file))
+    assert not agent03._is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, "/my/code.py"))
+    assert not agent03._is_torch_jit_notice(record(DeprecationWarning("other"), DeprecationWarning, jit_file))
+    assert not agent03._is_torch_jit_notice(record(UserWarning(notice), UserWarning, jit_file))

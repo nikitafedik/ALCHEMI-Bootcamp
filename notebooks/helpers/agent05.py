@@ -13,6 +13,7 @@ Every line a view or a check prints to the learner is a draft and lives in ``_WO
 
 from __future__ import annotations
 
+import logging
 import warnings
 from collections import Counter
 from pathlib import Path
@@ -94,12 +95,28 @@ _WORDS = {
 }
 
 
+class _HubTokenNotice(logging.Filter):
+    """Drop the Hub's "You are sending unauthenticated requests to the HF Hub" line, a WARNING record.
+
+    The Hub sends it with the first download of a session that has no HF_TOKEN; ``huggingface_hub``
+    logs it on the logger ``huggingface_hub.utils._http`` (L40S run, 27 Nov, the AceFF download).
+    The course download is public and needs no token.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.levelno == logging.WARNING
+            and "You are sending unauthenticated requests to the HF Hub" in record.getMessage()
+        )
+
+
 def configure_tutorial() -> None:
-    """Apply the course style (light only) and quiet torchmdnet's checkpoint-format notice.
+    """Apply the course style (light only) and quiet two library notices of the AceFF load.
 
     TorchMD-Net warns "Old-format checkpoint detected" when it loads the AceFF checkpoint and remaps it
     itself; the filter is narrow, by message and module (fix pass 27 Nov, R4). The course setup imports
     Toolkit's models first, so this filter sits in front of the "once" rule they add.
+    The Hub's token notice is dropped by message on its one logger (see ``_HubTokenNotice``).
     """
 
     _configure_tutorial()
@@ -109,6 +126,9 @@ def configure_tutorial() -> None:
         category=UserWarning,
         module=r"torchmdnet\.models\.model",
     )
+    hub_logger = logging.getLogger("huggingface_hub.utils._http")
+    if not any(isinstance(rule, _HubTokenNotice) for rule in hub_logger.filters):
+        hub_logger.addFilter(_HubTokenNotice())
 
 
 def make_work_dir() -> Path:

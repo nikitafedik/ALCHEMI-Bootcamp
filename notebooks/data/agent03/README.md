@@ -29,6 +29,21 @@ sAlex).
 (result: partial; the time budget of the speed piece is open with the
 educator).
 
+**Memory and time on the course GPU.** Measured on the NVIDIA L40S (46,068
+MiB; PyTorch sees 44.39 GiB) on 27 Nov 2026, Toolkit 0.3.0, float32:
+
+| Model on 200 crystals | Peak allocated | One energy and force pass |
+| --- | --- | --- |
+| MACE-MPA-0, no speed setting | 33.5 GiB (36 GB) | 0.98 s |
+| MACE-MPA-0 with cuEquivariance | 8.5 GiB (9.1 GB) | about 0.11 s |
+
+Without cuEquivariance the 200 crystals fill three quarters of the card. A
+second model of that kind in the same session can run out of memory even
+after `torch.cuda.empty_cache()`, because the freed memory is split into
+pieces. The sample of the speed step therefore times 50 crystals picked
+evenly from the batch (2,184 atoms, peak 9.5 GiB). Evidence:
+`notes/evidence/agent-03/l40s-20261127/`.
+
 ### Sources of the lattice constants
 
 Metals use ASE's built-in values, which the ASE source attributes to Ashcroft
