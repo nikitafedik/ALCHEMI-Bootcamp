@@ -37,23 +37,28 @@ files (used for short runs on a CPU):
 
 Notes on the samples:
 
-- `relax_build.py`, `relax_run.py`, `md_build.py` and `md_run.py` ran on a
-  GPU on 25 Nov 2026 and are unchanged since.
+- `relax_run.py`, `md_build.py` and `md_run.py` ran on a GPU on 25 Nov 2026
+  and are unchanged since. `relax_build.py` loads the model with
+  cuEquivariance when a CUDA GPU is present (`enable_cueq=device.type == "cuda"`)
+  and without it on a CPU. With `enable_cueq=True` it ran on the NVIDIA L40S
+  on 27 Nov 2026: at 200 crystals the peak allocated GPU memory was 8.2 GiB
+  through the MD and 9.4 GiB in the speed step.
   `relax_run.py` calls `torch.cuda.synchronize()` and needs a GPU.
 - `temperature_ladder.py` uses the saved default crystal,
   `helpers.load_ladder_crystal()` (copper, 64 atoms, `notebooks/data/agent03/`),
   one temperature for each copy from 100 K to 5,000 K spaced by a constant
   ratio, a 1 fs timestep and 300 steps. Each copy starts with velocities at
   its own temperature. It returns the energy per atom; the first row is the
-  crystal before the first step. On the NVIDIA L40S the cell takes 36.7 s
+  crystal before the first step. On the NVIDIA L40S the cell takes 11.4 s
   with 12 temperatures (27 Nov 2026).
 - `speed_settings.py` times 10 L-BFGS steps on 50 crystals picked evenly from
   `crystal_batch` (2,184 atoms of 8,722): a first run on a freshly loaded
   model and the median of three repeats, for each of the four cases, all on
   the same 50 crystals. It prints the size it timed. Without cuEquivariance
   the model needs about 36 GB for all 200 crystals; on the 48 GB L40S that
-  run fails with "out of memory" after the earlier steps, even once their
-  memory is handed back (measured 27 Nov 2026). The 50 crystals need about
+  run failed with "out of memory" after earlier steps on the same model
+  without cuEquivariance, even once their memory was handed back (measured
+  27 Nov 2026). The 50 crystals need about
   10 GB. A case that fails keeps its row,
   with the reason in `note`. cuEquivariance needs a CUDA GPU, so this file
   runs on the course GPU only.

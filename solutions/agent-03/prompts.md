@@ -24,8 +24,10 @@ relax_build:
 
 > Write agent03_work/relax_build.py: load the course crystals into one batch
 > with helpers.load_crystals(n_crystals), load the built-in MACE-MPA-0
-> wrapper, and report the largest force on each crystal. Give me
-> crystal_batch, mace_model and start_max_force.
+> wrapper in float32, with cuEquivariance when the device is a CUDA GPU
+> (dtype=torch.float32, enable_cueq=device.type == "cuda"), and report the
+> largest force on each crystal. Give me crystal_batch, mace_model and
+> start_max_force.
 
 relax_run:
 
@@ -60,9 +62,12 @@ temperature_ladder ("Try it"):
 speed_settings ("Try it"):
 
 > Write agent03_work/speed_settings.py. MACE has two speed settings in
-> Toolkit: cuEquivariance and model compilation. Time MACE-MPA-0 four ways
-> on crystal_batch, with neither, with each one, and with both, and explain
-> what each setting is for. Give me speed_table and setting_roles.
+> Toolkit: cuEquivariance and model compilation. Time ten L-BFGS steps of
+> MACE-MPA-0 on 50 crystals of crystal_batch, the same 50 in every case
+> because without cuEquivariance the full batch needs about four times the
+> memory, with cuEquivariance alone, compilation alone, both and neither,
+> and explain what each setting is for. Give me speed_table and
+> setting_roles.
 > helpers.show_speed_table(...) shows them: speed_table is a pandas
 > DataFrame, one row per case, with the columns cueq and compile (True or
 > False), first_call_s and repeat_s (s); setting_roles is a dict with a text

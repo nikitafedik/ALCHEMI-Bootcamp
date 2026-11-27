@@ -10,8 +10,8 @@ from nvalchemi.models.mace import MACEWrapper
 # The run: 10 L-BFGS steps on a part of the batch, 50 crystals picked evenly from crystal_batch, from the
 # same starting structures every time. Every step needs new neighbor lists and one energy + force pass,
 # which is the work every relaxation or MD step repeats.
-# Why a part: without cuEquivariance the model needs about 36 GB for all 200 crystals. On a 48 GB card
-# that run fails with "out of memory" after the earlier steps, even once their memory is handed back.
+# Why a part: without cuEquivariance the model needs about 36 GB for all 200 crystals, three quarters of a
+# 48 GB card.
 # The 50 crystals need about 10 GB, so all four cases fit and all four time the same crystals.
 # One first run on a freshly loaded model (it pays for kernel setup and, with compile, for compiling),
 # then 3 repeats; repeat_s is their median.

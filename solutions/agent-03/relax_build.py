@@ -11,7 +11,9 @@ crystal_batch = Batch.from_data_list([AtomicData.from_atoms(a) for a in crystals
 # Built-in MACE-MPA-0 wrapper. float32 weights match the float32 batch (the optimizer and the
 # integrators need positions and forces in one precision). Weights are frozen (default train=False);
 # forces come from autograd.
-mace_model = MACEWrapper.from_checkpoint("medium-mpa-0", device=device, dtype=torch.float32)
+# enable_cueq: NVIDIA's cuEquivariance GPU kernels for the tensor products; on when a CUDA GPU is present.
+mace_model = MACEWrapper.from_checkpoint("medium-mpa-0", device=device, dtype=torch.float32,
+                                         enable_cueq=device.type == "cuda")
 
 # Forces on the starting structures: neighbor lists first, then one forward pass.
 helpers.prepare_model_batch(crystal_batch, mace_model)

@@ -46,6 +46,10 @@ after `torch.cuda.empty_cache()`, because the freed memory is split into
 pieces. The sample of the speed step therefore times 50 crystals picked
 evenly from the batch (2,184 atoms, peak 9.5 GiB).
 
+The notebook loads the model with cuEquivariance from its first step. A
+full run of that kind at 200 crystals peaked at 8.2 GiB allocated through
+the MD and 9.4 GiB in the speed step.
+
 ### Sources of the lattice constants
 
 Metals use ASE's built-in values, which the ASE source attributes to Ashcroft
