@@ -1,0 +1,41 @@
+# Dark companion of alchemi-deck.mplstyle: same rules on the dark notebook
+# background (#1A1F23), light ink, dark grid, green for the main result.
+figure.facecolor: 1A1F23
+savefig.facecolor: 1A1F23
+figure.dpi: 120
+savefig.dpi: 300
+savefig.bbox: tight
+figure.constrained_layout.use: True
+axes.facecolor: 1A1F23
+axes.edgecolor: 5E6A74
+axes.linewidth: 1.0
+axes.labelcolor: C9CED3
+axes.titlecolor: F3F4F6
+axes.titleweight: bold
+axes.titlelocation: left
+axes.spines.top: False
+axes.spines.right: False
+axes.grid: True
+axes.grid.axis: y
+axes.axisbelow: True
+# C0 main result (green), C1 baseline (grey), C2 dark grey, C3 light green, C4 reference (light ink)
+axes.prop_cycle: cycler('color', ['76B900', '9AA3AB', '5E6A74', '9FD13A', 'F3F4F6'])
+grid.color: 2C343A
+grid.linewidth: 1.0
+lines.linewidth: 2.2
+lines.markersize: 6
+text.color: F3F4F6
+xtick.color: 9AA3AB
+ytick.color: 9AA3AB
+xtick.labelcolor: 9AA3AB
+ytick.labelcolor: 9AA3AB
+legend.frameon: False
+legend.labelcolor: C9CED3
+font.family: sans-serif
+font.sans-serif: NVIDIA Sans, Nimbus Sans, DejaVu Sans
+font.size: 9.5
+axes.titlesize: 11
+axes.labelsize: 9.5
+legend.fontsize: 8.5
+xtick.labelsize: 8.5
+ytick.labelsize: 8.5

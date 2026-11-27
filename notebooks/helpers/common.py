@@ -27,6 +27,10 @@ def _configure_local_runtime() -> None:
     """Set cache fallbacks that still apply in a directly selected kernel."""
 
     for variable, path in _DIRECT_KERNEL_CACHE_PATHS.items():
+        # The D3 tables are a prepared file: name it only where it exists, so
+        # the lookup beside the Python runtime still applies elsewhere.
+        if variable == "ALCHEMI_D3_PARAM_FILE" and not path.is_file():
+            continue
         os.environ.setdefault(variable, str(path))
 
 
@@ -46,8 +50,17 @@ def _prime_tree_set_notice() -> None:
 
 
 def _ignore_known_aimnet2_cutoff_warning() -> None:
-    """Ignore the pinned wrapper's scalar cutoff conversion notice."""
+    """Ignore the pinned wrapper's scalar cutoff conversion notice.
 
+    Toolkit's ``nvalchemi.models.base`` runs ``warnings.simplefilter("once", UserWarning)``
+    when it is first imported, which puts that rule in front of every filter set
+    before it. Import it first, so this filter lands in front of that rule.
+    """
+
+    try:
+        import nvalchemi.models.base  # noqa: F401
+    except Exception:  # without Toolkit there is no such rule to get in front of
+        pass
     warnings.filterwarnings(
         "ignore",
         message="Converting a tensor with requires_grad=True to a scalar.*",

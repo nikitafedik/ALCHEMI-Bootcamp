@@ -19,6 +19,7 @@ the generated D3 parameter table live in runtime caches.
 | NCI Atlas curve subset | `notebooks/data/nci_atlas/nci-atlas-curves.csv.gz` | CC BY 4.0 |
 | NCI Atlas NCIA250 archive | `notebooks/data/nci_atlas/NCIA250.zip` | CC BY 4.0 |
 | Mg-MOF-74 primitive structure | `notebooks/data/mof74/mg-mof-74-primitive.cif` | MIT |
+| SiC-TGAP liquid cut (360 of 3,000 DFT frames; Hamedani and Sand, 2025, Zenodo 10.5281/zenodo.17182227) | `notebooks/data/agent09/sic-tgap/cut/` | CC BY 4.0 |
 | 3Dmol.js 2.5.5 browser bundle and notices | `shared/3dmol-2.5.5/` | BSD-3-Clause and the incorporated notices in `LICENSE` |
 | py3Dmol 2.5.5 license copy | `shared/py3dmol-2.5.5/LICENSE.txt` | MIT |
 | NVIDIA course banner | `shared/alchemi-banner-left.png` | NVIDIA course artwork; excluded from Apache-2.0 |
@@ -103,6 +104,17 @@ PubChem compound records: [3672](https://pubchem.ncbi.nlm.nih.gov/compound/3672)
 hydrogens, generates fixed-seed ETKDGv3 coordinates, and optimizes each local
 structure. The repository contains the source identifiers and SMILES, not a
 downloaded PubChem coordinate file.
+
+## Alanine dipeptide conformer starts
+
+The alanine dipeptide starts of the agentic notebook "Made to order" are
+generated, not downloaded: RDKit builds the all-trans molecule
+`CC(=O)N[C@@H](C)C(=O)NC` from its SMILES with a fixed-seed embedding and an
+MMFF clean-up, and ASE sets the backbone angles phi and psi on a 12 by 12 grid. Grid points
+where two atoms come closer than 0.7 Å are dropped (5 of 144), leaving 139
+starts. The repository holds no dipeptide coordinate file and no third-party structure
+data. The tools and their licences are listed under Runtime software and model
+assets (RDKit: BSD-3-Clause; ASE: LGPL-2.1-or-later).
 
 ## Molecular viewer
 

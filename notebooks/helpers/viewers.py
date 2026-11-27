@@ -1156,7 +1156,7 @@ class StructureSelection:
         keys = self.selected_keys
         if not keys:
             raise ValueError(
-                "Select at least one molecular card before building a Batch"
+                "Select at least one system card before building a Batch"
             )
         return [self._catalog[key] for key in keys]
 

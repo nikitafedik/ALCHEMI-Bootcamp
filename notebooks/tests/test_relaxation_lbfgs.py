@@ -125,6 +125,57 @@ def test_lbfgs_run_returns_the_cell_9_dictionary_on_cpu() -> None:
     assert "AlchemiViewer.mountPlayer" in html_lib.unescape(result["player"].data)
 
 
+@pytest.mark.skipif(not _lbfgs_available(), reason="LBFGS needs Toolkit 0.3.0")
+def test_lbfgs_run_keeps_frozen_atoms_and_distinct_frames_on_cpu() -> None:
+    import numpy as np
+    from ase.build import add_adsorbate, fcc111
+    from helpers.catalog import mace_checkpoint_path
+
+    try:
+        mace_checkpoint_path("medium-mpa-0")
+    except Exception:  # checkpoint not available in this environment
+        pytest.skip("MACE checkpoint not available")
+
+    slab = fcc111("Cu", size=(2, 2, 3), vacuum=7.0)
+    frozen = slab.get_tags() >= 2
+    add_adsorbate(slab, "O", height=1.2, position="fcc")
+    frozen = np.append(frozen, False)
+    slab.set_array("frozen", frozen)
+    built = slab.copy()
+
+    class _Selection:
+        def selected_specs(self):
+            return [_Spec(slab, "Slab"), _Spec(molecule("H2O"), "Water")]
+
+    result = module00.relax_selected_structures(
+        _Selection(),
+        device="cpu",
+        fmax=0.05,
+        max_steps=3,
+        distortion_std_angstrom=0.20,
+        distortion_seed=7,
+        batch_multiplier=2,
+        warmup=False,
+    )
+    preview = result["preview"]
+    frames = preview["trajectories"]["Slab"]
+    start = preview["reference_structures"]["Slab"]
+
+    assert preview["frozen_atoms"] == {"Slab": 8, "Water": 0}
+    # The shake leaves the frozen atoms where the builder put them.
+    np.testing.assert_array_equal(start.positions[frozen], built.positions[frozen])
+    assert np.abs(start.positions[~frozen] - built.positions[~frozen]).max() > 0.05
+    for frame in frames:
+        np.testing.assert_allclose(
+            frame.positions[frozen], built.positions[frozen], rtol=0.0, atol=1e-5
+        )
+        assert np.abs(frame.arrays["forces"][frozen]).max() == 0.0
+    # Free atoms move, and each stored frame is its own step.
+    assert np.abs(frames[-1].positions[~frozen] - frames[0].positions[~frozen]).max() > 1e-3
+    forces = preview["force_history"]["Slab"]
+    assert len(set(np.round(forces, 6))) > 1
+
+
 def test_molecule_first_mixed_batch_keeps_per_system_cell_and_pbc() -> None:
     import torch
     from ase.build import bulk
@@ -160,8 +211,7 @@ def test_srtio3_catalog_entry() -> None:
     spec = catalog["srtio3"]
     atoms = spec.build()
 
-    assert "mg_mof74" not in catalog
-    assert keys[-1] == "srtio3" and len(keys) == 12
+    assert keys[0] == "srtio3" and len(keys) == 12
     assert spec.display_name == "Strontium titanate (SrTiO₃)"
     assert (spec.purpose, spec.domain) == (
         "Perovskite photocatalyst",

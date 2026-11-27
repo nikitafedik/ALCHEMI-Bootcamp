@@ -76,7 +76,13 @@ sys.path.insert(0, {str(CORE_DIR)!r})
 from helpers.common import configure_tutorial
 configure_tutorial()
 expected_root = Path({str(PROJECT_ROOT / ".alchemi-runtime")!r})
+d3_file = expected_root / "dftd3" / "dftd3_parameters.pt"
 for variable in {variables!r}:
+    if variable == "ALCHEMI_D3_PARAM_FILE" and not d3_file.is_file():
+        # Named only where the prepared file exists; the lookup beside the
+        # Python runtime applies otherwise.
+        assert variable not in os.environ
+        continue
     assert Path(os.environ[variable]).is_relative_to(expected_root)
 """
     environment = os.environ.copy()

@@ -11,6 +11,7 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 |---|---|---|
 | NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/data/nci_atlas/README.md` |
 | Mg-MOF-74 primitive structure | MIT | `notebooks/data/mof74/README.md` |
+| SiC-TGAP liquid cut for agentic notebook 09 (adapted; changes listed in the notice) | CC BY 4.0 | `notebooks/data/agent09/sic-tgap/cut/LICENSE` |
 | 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
 | py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
 | three.js 0.186.1 bundle | MIT | `shared/three-0.186.1/LICENSE` |
@@ -129,6 +130,19 @@ dependency set includes `matscipy` under LGPL-2.1-or-later and
 `python-hostlist` under
 GPL-2.0-or-later. The `.licenses/` inventory records their installed versions
 and license texts.
+
+### AceFF 2.0 and TorchMD-Net
+
+Agentic notebook 05 wraps AceFF 2.0. At run time it resolves the checkpoint
+`aceff_v2.0.ckpt` from the Hugging Face repository `Acellera/AceFF-2.0`
+(SHA-256 `877af6bf84cc69d6d5cbd377a61cfc19c45fb87a00583f7c867e2f9d244cc8fd`)
+and loads it with `torchmd-net 3.1.0`, distributed under the MIT license. The
+model card gives Apache-2.0 for the weights.
+
+- [AceFF 2.0 model card](https://huggingface.co/Acellera/AceFF-2.0)
+- [TorchMD-Net source and MIT license](https://github.com/torchmd/torchmd-net)
+
+Checkpoint bytes stay outside the source repository.
 
 ### RDKit
 

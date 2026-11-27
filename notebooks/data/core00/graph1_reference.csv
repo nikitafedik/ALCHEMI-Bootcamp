@@ -1,0 +1,4 @@
+bar,route,device,machine,workload_structures,workload_steps,structure_steps_per_s,time_for_workload_s,source
+one by one,plain (float32; no cuEq; no compile),GPU NVIDIA L40S,cl node a1u1g-mil-0620,60,50,32.5,92.3,batching_l40s_v4.csv size-1 rows (five singles in sequence; mean of 3)
+one by one,plain,CPU AMD EPYC 7313P (16 cores; 32 threads),cl node a1u1g-mil-0616,60,50,7.67,391.1,batching_cpu_v4.csv size-1 row
+your batch (reference value on L40S; the notebook draws the learner's own live value),plain,GPU NVIDIA L40S,cl node a1u1g-mil-0620,60,50,243.7,12.3,batching_l40s_v4.csv 60-structure rows (mean of 2)

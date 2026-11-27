@@ -538,8 +538,12 @@ def _place_text(
             candidate.remove()
 
 
-def _bottom_line(you: dict[str, Any] | None) -> str:
-    """Return the line under the figure: the learner's GPU, then the cached CPU."""
+def _bottom_line(you: dict[str, Any] | None, labels: list[str] | None = None) -> str:
+    """Return the line under the figure: the learner's GPU, then the cached CPU.
+
+    With ``labels``, the CPU line is left out when a picked system has no
+    stored CPU time, because the pane then draws no CPU bar.
+    """
 
     parts = []
     if you is not None:
@@ -547,7 +551,9 @@ def _bottom_line(you: dict[str, Any] | None) -> str:
         parts.append(
             GPU_LINE.format(gpu=name, memory=you["memory"]) if you["memory"] else f"{name}."
         )
-    parts.append(CPU_LINE.format(cpu=stored_cpu_singles()["cpu"]))
+    cpu = stored_cpu_singles()
+    if labels is None or all(label in cpu["seconds"] for label in labels):
+        parts.append(CPU_LINE.format(cpu=cpu["cpu"]))
     return "\n".join(parts)
 
 
@@ -573,7 +579,7 @@ def build_batching_figure(relaxation: Any, *, singles: dict[str, float] | None =
         _draw_right(right, you, pal)
         # The run line sits under the left pane, left-aligned with its axis, below the x label.
         left.annotate(
-            _bottom_line(you),
+            _bottom_line(you, labels),
             xy=(0, 0),
             xycoords=("axes fraction", left.xaxis.label),
             xytext=(0, -9),

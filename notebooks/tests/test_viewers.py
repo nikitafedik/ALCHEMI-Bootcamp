@@ -182,7 +182,7 @@ def test_structure_selection_updates_the_python_batch_choice() -> None:
     assert controls["urea"].description == "+ Add to batch"
 
     controls["water"].value = False
-    with pytest.raises(ValueError, match="Select at least one molecular card"):
+    with pytest.raises(ValueError, match="Select at least one system card"):
         selection.selected_specs()
 
 

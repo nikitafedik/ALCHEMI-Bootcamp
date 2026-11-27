@@ -206,3 +206,12 @@ def test_your_batch_label_touches_no_other_label(rate) -> None:
         if other is not label[0]:
             assert not box.overlaps(other.get_window_extent(renderer)), other.get_text()
     plt.close(figure)
+
+
+def test_cpu_line_shows_only_with_a_stored_cpu_time_for_every_pick() -> None:
+    you = {"gpu": "NVIDIA L40S", "memory": 46}
+    stored = next(iter(bf.stored_cpu_singles()["seconds"]))
+
+    assert bf._bottom_line(you, [stored]).endswith("CPU: AMD EPYC 7313P, cached.")
+    assert bf._bottom_line(you, [stored, "A system without a stored time"]) == "Your run: L40S, 46 GB."
+    assert bf._bottom_line(None, ["A system without a stored time"]) == ""

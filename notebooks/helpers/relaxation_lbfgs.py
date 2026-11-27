@@ -4,7 +4,9 @@
 """L-BFGS relaxation to a force threshold for the Module 00 quick tour.
 
 Needs Toolkit 0.3.0 (``LBFGS``). Every system relaxes until its largest force
-is at or below ``fmax``; a ``FusedStage`` retires systems one by one.
+is at or below ``fmax``; a ``FusedStage`` retires systems one by one. Atoms a
+structure marks in its boolean array ``frozen`` (the two bottom layers of the
+catalog slabs) stay at their built positions: ``FreezeAtomsHook`` holds them.
 """
 
 from __future__ import annotations
@@ -52,12 +54,16 @@ def thin_frame_indices(
 class _CountingSink:
     """Pass writes to a sink and count them on the host, without a device read."""
 
-    def __init__(self, sink: Any) -> None:
+    def __init__(self, sink: Any, *, copy: bool = False) -> None:
         self.sink = sink
         self.writes = 0
+        self.copy = copy
 
     def write(self, batch: Any, mask: Any = None) -> None:
-        self.sink.write(batch, mask)
+        # ``HostMemory`` keeps views of a batch that is already on the CPU, so
+        # every stored frame would follow the live batch. A copy keeps each
+        # frame as it was when it was written.
+        self.sink.write(batch.clone() if self.copy else batch, mask)
         self.writes += 1
 
     def read(self) -> Any:
@@ -93,6 +99,28 @@ class _StatusRecorder:
         if self.sink.writes != self._size:
             self._size = self.sink.writes
             self.saved_steps.append(len(self.rows))
+
+
+def frozen_mask(structure: Atoms) -> np.ndarray:
+    """Return the boolean ``frozen`` array of a structure, all False without one."""
+
+    mask = structure.arrays.get("frozen")
+    if mask is None:
+        return np.zeros(len(structure), dtype=bool)
+    return np.asarray(mask, dtype=bool)
+
+
+def _with_frozen_atoms(data: Any, structure: Atoms) -> Any:
+    """Mark the frozen atoms of one system for ``FreezeAtomsHook``."""
+
+    from nvalchemi._typing import AtomCategory
+
+    mask = frozen_mask(structure)
+    if mask.any():
+        data.atom_categories[
+            torch.as_tensor(mask, device=data.atom_categories.device)
+        ] = AtomCategory.SPECIAL.value
+    return data
 
 
 def _with_cell_and_pbc(data: Any, structure: Any) -> Any:
@@ -218,7 +246,7 @@ def relax_selected_structures_lbfgs(
         GPUBuffer,
         HostMemory,
     )
-    from nvalchemi.dynamics.hooks import SnapshotHook
+    from nvalchemi.dynamics.hooks import FreezeAtomsHook, SnapshotHook
     from nvalchemi.neighbors import compute_neighbors
 
     if torch.device(device).type == "cuda":
@@ -250,16 +278,30 @@ def relax_selected_structures_lbfgs(
             displacement = random.normal(
                 scale=distortion_std_angstrom, size=structure.positions.shape
             )
-            displacement -= displacement.mean(axis=0, keepdims=True)
+            # Frozen atoms keep their built positions; the free atoms are shaken
+            # with no net shift.
+            free = ~frozen_mask(structure)
+            displacement[free] -= displacement[free].mean(axis=0, keepdims=True)
+            displacement[~free] = 0.0
             structure.positions += displacement
         structures.append(structure)
 
     graphs = [
-        _with_cell_and_pbc(AtomicData.from_atoms(structure, device=run_device), structure)
+        _with_frozen_atoms(
+            _with_cell_and_pbc(
+                AtomicData.from_atoms(structure, device=run_device), structure
+            ),
+            structure,
+        )
         for _ in range(batch_multiplier)
         for structure in structures
     ]
     batch = Batch.from_data_list(graphs, device=run_device)
+    any_frozen = any(bool(frozen_mask(structure).any()) for structure in structures)
+    frozen_counts = {
+        spec.display_name: int(frozen_mask(structure).sum())
+        for spec, structure in zip(specs, structures, strict=True)
+    }
     labels = [spec.display_name for spec in specs]
     n_labels = len(labels)
     n_graphs = batch.num_graphs
@@ -299,7 +341,9 @@ def relax_selected_structures_lbfgs(
             )
         else:
             raw_sink = HostMemory(capacity=capacity)
-        frame_sink_wrapper = _CountingSink(raw_sink)
+        frame_sink_wrapper = _CountingSink(
+            raw_sink, copy=not use_gpu and run_device.type == "cpu"
+        )
         recorder = _StatusRecorder(frame_sink_wrapper)
         lbfgs = LBFGS(
             model=model,
@@ -308,13 +352,27 @@ def relax_selected_structures_lbfgs(
             convergence_hook=ConvergenceHook.from_fmax(stop_fmax),
         )
         fused = FusedStage(sub_stages=[(0, lbfgs)])
+        # The freeze hook comes first, and only when a system has frozen atoms,
+        # so a selection without slabs runs the same route as before.
+        freeze = [FreezeAtomsHook()] if any_frozen else []
         for hook in (
+            *freeze,
             *model.make_neighbor_hooks(),
             SnapshotHook(frame_sink_wrapper, frequency=snapshot_frequency),
             recorder,
         ):
             fused.register_hook(hook)
         return prepared, lbfgs, fused, frame_sink_wrapper, recorder
+
+    def clear_frozen_forces(prepared: Batch) -> None:
+        """Zero the forces on frozen atoms, so frame 0 reports the free atoms."""
+
+        if any_frozen:
+            from nvalchemi._typing import AtomCategory
+
+            held = prepared.atom_categories == AtomCategory.SPECIAL.value
+            with torch.no_grad():
+                prepared.forces[held] = 0.0
 
     warmup_s = 0.0
     if warmup:
@@ -326,6 +384,7 @@ def relax_selected_structures_lbfgs(
             batch, 5 * n_graphs, 1.0e-12
         )
         warm_opt.compute(warm_batch)
+        clear_frozen_forces(warm_batch)
         warm_sink.write(warm_batch)
         warm_stage.run(warm_batch, n_steps=3)
         if run_device.type == "cuda":
@@ -335,6 +394,7 @@ def relax_selected_structures_lbfgs(
     capacity = (max_steps // snapshot_frequency + 2) * n_graphs
     dynamics_batch, optimizer, stage, sink, status = assemble(batch, capacity, fmax)
     optimizer.compute(dynamics_batch)
+    clear_frozen_forces(dynamics_batch)
     allocated_before = torch.cuda.memory_allocated(run_device) if use_gpu else 0
     sink.write(dynamics_batch)
     status._size = sink.writes
@@ -446,6 +506,7 @@ def relax_selected_structures_lbfgs(
         "convergence_steps": per_system_steps,
         "unconverged_graphs": int((converged_step == 0).sum()),
         "speed_settings": {"compile_model": use_compile, "enable_cueq": use_cueq},
+        "frozen_atoms": frozen_counts,
     }
     if player_factory is None:
         from .viewers_three import show_relaxation_player_three as player_factory

@@ -1,0 +1,21 @@
+gpu,route,structures,structure_steps_per_s,min,max,repeats,source
+NVIDIA L40S,cuEq + compile,1,28.0,27.1,29.9,3,batching_l40s_v6.csv (size 1 = five singles in sequence)
+NVIDIA L40S,cuEq + compile,8,271.7,270.0,273.4,2,batching_l40s_v6.csv
+NVIDIA L40S,cuEq + compile,32,949.1,945.8,952.3,2,batching_l40s_v6.csv
+NVIDIA L40S,cuEq + compile,128,1948.9,1946.2,1951.6,2,batching_l40s_v6.csv
+NVIDIA L40S,cuEq + compile,512,2313.9,2235.5,2392.2,2,batching_l40s_v6.csv
+NVIDIA H100 80GB HBM3,cuEq + compile,1,26.4,25.5,28.2,3,batching_h100_v6.csv (size 1 = five singles in sequence)
+NVIDIA H100 80GB HBM3,cuEq + compile,8,258.8,258.8,258.8,2,batching_h100_v6.csv
+NVIDIA H100 80GB HBM3,cuEq + compile,32,910.1,907.5,912.8,2,batching_h100_v6.csv
+NVIDIA H100 80GB HBM3,cuEq + compile,128,2374.6,2370.7,2378.6,2,batching_h100_v6.csv
+NVIDIA H100 80GB HBM3,cuEq + compile,512,2761.2,2601.1,2996.6,3,batching_h100_v6.csv
+NVIDIA B200,cuEq + compile,1,31.5,30.4,33.5,3,batching_b200_v6.csv (size 1 = five singles in sequence)
+NVIDIA B200,cuEq + compile,8,298.6,294.0,303.1,2,batching_b200_v6.csv
+NVIDIA B200,cuEq + compile,32,1086.4,1082.8,1090.1,2,batching_b200_v6.csv
+NVIDIA B200,cuEq + compile,128,2999.3,2991.2,3007.4,2,batching_b200_v6.csv
+NVIDIA B200,cuEq + compile,512,4248.5,4001.1,4700.4,3,batching_b200_v6.csv
+NVIDIA B200,plain,1,44.1,44.0,44.1,2,batching_b200_plain_v5.csv (plain route has no size-order effect: fresh-process control at 128 gave 664 vs 655)
+NVIDIA B200,plain,8,329.6,328.9,330.3,2,batching_b200_plain_v5.csv (plain route has no size-order effect: fresh-process control at 128 gave 664 vs 655)
+NVIDIA B200,plain,32,535.8,535.7,535.9,2,batching_b200_plain_v5.csv (plain route has no size-order effect: fresh-process control at 128 gave 664 vs 655)
+NVIDIA B200,plain,128,655.1,654.5,655.8,2,batching_b200_plain_v5.csv (plain route has no size-order effect: fresh-process control at 128 gave 664 vs 655)
+NVIDIA B200,plain,512,693.9,693.7,694.0,2,batching_b200_plain_v5.csv (plain route has no size-order effect: fresh-process control at 128 gave 664 vs 655)
