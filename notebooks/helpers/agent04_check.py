@@ -17,11 +17,11 @@ Every line the check prints to the learner is in ``LINES``, in one place.
 
 from __future__ import annotations
 
-import sys
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -29,14 +29,18 @@ __all__ = ["LINES", "STEPS", "check_step", "main"]
 
 KCAL_PER_EV = 23.0605
 MIN_COULOMB_RANGE = 12.0  # Å: 5 Å drops pairs (4.2 kcal/mol on the scans), 12 Å and the 15 Å default hold (0.34)
-# PROVISIONAL (the advisor's recommendation of 26 Nov; board question sci-a04-basins): the conformer step names
-# its force threshold, helpers.relax_settings()["fmax"], in the input row, so a conformer above it is a problem.
-# False: the threshold is not part of the step, and a conformer above it is an "unexpected" note that passes.
+# True: the conformer step names its force threshold, helpers.relax_settings()["fmax"], in its input row, and
+# a conformer above it is a problem. False: the threshold is not part of the step, and a conformer above it is
+# an "unexpected" note that passes.
 THRESHOLD_IN_CONTRACT = True
 FORCE_TOLERANCE = 1.01  # the check recomputes the forces; 1 % covers the float32 noise of a second model call
 NOT_IN_CELL = ("__file__",)  # names a script has and a notebook cell does not
+ELECTROSTATICS_WORDS = ("Coulomb", "Ewald", "PME")  # class names of electrostatics terms: the course's and Toolkit's
+MAX_SCAN_MAE = 8.0  # kcal/mol: a composed model further than this from the scan references is miswired
+MAX_NCIA_MAE = 6.0  # kcal/mol: the same for the NCIA complexes
+MAX_ENERGY_GAP = 50.0  # eV: composed and bare energies further apart than this are in different units
 
-# Every line printed to the learner. Draft wording until the educator approves it.
+# Every line printed to the learner.
 LINES = {
     "ok": "{step}: OK ({n} names)",
     "usage": "usage: python -m helpers.agent04 check <step>\nsteps: {steps}",
@@ -144,9 +148,6 @@ def _energy_problems(ns: dict, name: str, n: int) -> list[str]:
     return []
 
 
-ELECTROSTATICS_WORDS = ("Coulomb", "Ewald", "PME")  # class names of electrostatics terms: the course's and Toolkit's
-
-
 def _terms(model: Any) -> list[Any]:
     """The terms of a model: the step models of a pipeline, taken apart down to plain models.
 
@@ -222,28 +223,41 @@ def _scan_mae(energy: Any) -> float:
 # --------------------------------------------------------------------------
 
 
+def _scan_batch_problems(batch: Any) -> list[str]:
+    """All 90 scan structures in one batch, on the GPU when there is one, each with its own total charge."""
+
+    import torch
+
+    out = []
+    got = getattr(batch, "num_graphs", None)
+    if got != 90:
+        out.append(LINES["scan_batch_count"].format(got=got if got is not None else "?", n=90))
+    positions = getattr(batch, "positions", None)
+    if positions is not None and torch.cuda.is_available() and positions.device.type != "cuda":
+        out.append(LINES["scan_batch_gpu"])
+    elif got == 90:
+        out += _charge_problems(batch)
+    return out
+
+
+def _charge_problems(batch: Any) -> list[str]:
+    """The total charge of each scan structure is the one the loader gave."""
+
+    from . import agent04 as helpers
+
+    have = getattr(batch, "charge", None)
+    if have is None:
+        return []
+    atoms, _ = helpers.load_nci_scans()
+    want = np.array([a.info.get("charge", 0) for a in atoms], dtype=float)
+    lost = int((~np.isclose(_array(have).reshape(-1), want)).sum())
+    return [LINES["charge_lost"].format(k=lost, n=len(want))] if lost else []
+
+
 def _check_compose_build(ns: dict) -> list[str]:
     out = _energy_problems(ns, "base_energy", 90)
     if "scan_batch" in ns:
-        batch = ns["scan_batch"]
-        got = getattr(batch, "num_graphs", None)
-        if got != 90:
-            out.append(LINES["scan_batch_count"].format(got=got if got is not None else "?", n=90))
-        positions = getattr(batch, "positions", None)
-        import torch
-
-        if positions is not None and torch.cuda.is_available() and positions.device.type != "cuda":
-            out.append(LINES["scan_batch_gpu"])
-        elif got == 90:
-            from . import agent04 as helpers
-
-            atoms, _ = helpers.load_nci_scans()
-            want = np.array([a.info.get("charge", 0) for a in atoms], dtype=float)
-            have = getattr(batch, "charge", None)
-            if have is not None:
-                lost = int((~np.isclose(_array(have).reshape(-1), want)).sum())
-                if lost:
-                    out.append(LINES["charge_lost"].format(k=lost, n=len(want)))
+        out += _scan_batch_problems(ns["scan_batch"])
     if "scan_labels" in ns and len(ns["scan_labels"]) != 30:
         out.append(LINES["scan_labels_count"].format(got=len(ns["scan_labels"]), n=30))
     return out
@@ -261,14 +275,14 @@ def _check_compose_run(ns: dict) -> list[str]:
         from . import agent04 as helpers
 
         mae = _scan_mae(ns["composed_energy"])
-        if mae > 8.0:
+        if mae > MAX_SCAN_MAE:
             out.append(LINES["scan_error"].format(mae=mae))
         ncia = float(np.abs(_interaction_kcal(ns["ncia_energy"]) - helpers.load_ncia_references()).mean())
-        if ncia > 6.0:
+        if ncia > MAX_NCIA_MAE:
             out.append(LINES["ncia_error"].format(mae=ncia))
         if "base_energy" in ns:
             gap = float(np.abs(_array(ns["composed_energy"]).reshape(-1) - _array(ns["base_energy"]).reshape(-1)).max())
-            if gap > 50.0:
+            if gap > MAX_ENERGY_GAP:
                 out.append(LINES["energy_gap"].format(gap=gap))
     return out
 
@@ -283,33 +297,65 @@ def _check_no_d3(ns: dict) -> list[str]:
         if not _has_electrostatics(ns["no_d3_model"]):
             out.append(LINES["no_d3_no_coulomb"])
     if not out and all(k in ns for k in ("base_energy", "composed_energy", "no_d3_energy")):
-        # "Done when: the plot adds your curve to the three panels": the plot's data layer takes the curve
-        from . import agent04 as helpers
-        from .agent04_plots import interaction_curves_data
-
-        try:
-            _, labels = helpers.load_nci_scans()
-            data = interaction_curves_data(labels, base=ns["base_energy"], composed=ns["composed_energy"], no_d3=ns["no_d3_energy"])
-            if "no_d3" not in data["lines"]:
-                raise ValueError("no line for no_d3_energy")
-        except Exception as error:
-            out.append(LINES["plot_data"].format(name="no_d3_energy", error=str(error)[:120]))
+        out += _no_d3_plot_problems(ns)
     return out
 
 
-def _check_conformers(ns: dict) -> list[str]:
+def _no_d3_plot_problems(ns: dict) -> list[str]:
+    """The step promises that the plot adds the curve to the three panels: the plot's data layer takes it."""
+
     from . import agent04 as helpers
+    from .agent04_plots import interaction_curves_data
+
+    try:
+        _, labels = helpers.load_nci_scans()
+        data = interaction_curves_data(labels, base=ns["base_energy"], composed=ns["composed_energy"], no_d3=ns["no_d3_energy"])
+        if "no_d3" not in data["lines"]:
+            raise ValueError("no line for no_d3_energy")
+    except Exception as error:
+        return [LINES["plot_data"].format(name="no_d3_energy", error=str(error)[:120])]
+    return []
+
+
+def _conformer_count(ns: dict) -> tuple[int | None, list[str]]:
+    """The number of conformers in the two batches, and a line when a name is not a batch or the counts differ.
+
+    A list of ASE ``Atoms`` has no ``num_graphs``: it is reported alone, and the count is None.
+    """
 
     out = []
     n = None
     for name in ("conformer_batch", "relaxed_conformers"):
         if name in ns:
             graphs = getattr(ns[name], "num_graphs", None)
-            if graphs is None:  # validation 26 Nov: a trial returned a list of ASE Atoms, sorted by energy
-                return [LINES["not_batch"].format(name=name, got=type(ns[name]).__name__)]
+            if graphs is None:
+                return None, [LINES["not_batch"].format(name=name, got=type(ns[name]).__name__)]
             n = n or graphs
             if graphs != n:
                 out.append(LINES["conformer_counts"].format(name=name, got=graphs))
+    return n, out
+
+
+def _conformer_map_problems(ns: dict) -> list[str]:
+    """The step promises that the map shows where each conformer ended: the map's data layer takes the names."""
+
+    from .agent04_plots import conformers_data
+
+    try:
+        data = conformers_data(ns["conformer_batch"], ns["relaxed_conformers"], ns["conformer_energy"])
+        if not np.isfinite(np.asarray(data["end"], dtype=float)).all():
+            raise ValueError("an end point is not finite")
+    except Exception as error:
+        return [LINES["plot_data"].format(name="the conformers", error=str(error)[:120])]
+    return []
+
+
+def _check_conformers(ns: dict) -> list[str]:
+    from . import agent04 as helpers
+
+    n, out = _conformer_count(ns)
+    if n is None and out:
+        return out
     expected = len(helpers.load_dipeptide_grid())
     if n is not None and n != expected:
         out.append(LINES["conformer_loader"].format(got=n, n=expected))
@@ -320,17 +366,9 @@ def _check_conformers(ns: dict) -> list[str]:
         if moved < 1e-4:
             out.append(LINES["not_moved"])
     if not out and all(k in ns for k in ("conformer_batch", "relaxed_conformers", "conformer_energy")):
-        # "Done when: ... the map shows where each one ended": the map's data layer takes the three names
-        from .agent04_plots import conformers_data
-
-        try:
-            data = conformers_data(ns["conformer_batch"], ns["relaxed_conformers"], ns["conformer_energy"])
-            if not np.isfinite(np.asarray(data["end"], dtype=float)).all():
-                raise ValueError("an end point is not finite")
-        except Exception as error:
-            out.append(LINES["plot_data"].format(name="the conformers", error=str(error)[:120]))
+        out += _conformer_map_problems(ns)
     if not out and THRESHOLD_IN_CONTRACT and "composed_model" in ns:
-        # "Done when: every conformer was relaxed ...": each one is below the step's force threshold
+        # the step promises that every conformer was relaxed: each one is below the step's force threshold
         try:
             _, _, peak = _conformer_evaluation(ns)
         except Exception as error:
@@ -471,6 +509,18 @@ def _run_file(path: Path, ns: dict) -> str | None:
     return None
 
 
+def _stop_lines(step: str, path: Path, error: str, again: bool = False) -> list[str]:
+    """The line for a file that stopped with ``error``, on its first run or when it ran ``again``."""
+
+    if "edge_ptr" in error:
+        return [LINES["edge_ptr"].format(step=step)]
+    for missing in NOT_IN_CELL:  # a script name such as __file__: a %load cell has none
+        if error.startswith(f"NameError: name '{missing}' is not defined"):
+            return [LINES["not_in_cell"].format(step=step, file=path.name, name=missing)]
+    key = "file_stops_again" if again else "file_stops"
+    return [LINES[key].format(step=step, file=path.name, error=error)]
+
+
 def check_step(step: str, work_dir: Path | None = None) -> list[str]:
     """Run ``step`` after its earlier steps in one namespace; return the lines to print.
 
@@ -488,26 +538,17 @@ def check_step(step: str, work_dir: Path | None = None) -> list[str]:
         ns,
     )
 
-    def stops(name: str, path: Path, error: str, again: bool = False) -> list[str]:
-        if "edge_ptr" in error:
-            return [LINES["edge_ptr"].format(step=name)]
-        for missing in NOT_IN_CELL:  # a script name such as __file__: a %load cell has none
-            if error.startswith(f"NameError: name '{missing}' is not defined"):
-                return [LINES["not_in_cell"].format(step=name, file=path.name, name=missing)]
-        key = "file_stops_again" if again else "file_stops"
-        return [LINES[key].format(step=name, file=path.name, error=error)]
-
     for name in _order(step):
         path = work_dir / STEPS[name].file
         if not path.exists():
             return [LINES["file_missing"].format(step=name, file=path.name, folder=work_dir)]
         error = _run_file(path, ns)
         if error:
-            return stops(name, path, error)
+            return _stop_lines(name, path, error)
     path = work_dir / STEPS[step].file
     error = _run_file(path, ns)  # a learner reruns a cell: the file must work a second time
     if error:
-        return stops(step, path, error, again=True)
+        return _stop_lines(step, path, error, again=True)
     spec = STEPS[step]
     problems = [LINES["name_missing"].format(step=step, name=name) for name in spec.names if name not in ns]
     if not problems:

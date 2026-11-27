@@ -223,11 +223,10 @@ def d3_settings() -> dict:
 # Conformer relaxation: the force threshold
 # --------------------------------------------------------------------------
 
-# Resolved 26 Nov (board question sci-a04-basins, option A; DOUBLE CHECK): the conformer step names a force
-# threshold as a setting in its input row. This is the one place that holds it; the step check reads it from
-# here (``agent04_check.THRESHOLD_IN_CONTRACT`` switches the check back to a note). Value from a run: at
-# 0.05 eV/Å 31 of 47 end points still move by more than 10 degrees when relaxed on to 0.01; from 0.01 to 0.005,
-# 9 of 47 (notes/evidence/agent-04, "threshold"). ``ALCHEMI_A04_RELAX_FMAX`` overrides it for short CPU test runs.
+# The force threshold of the conformer step, the one place that holds it. The step names it as a setting
+# and the step check reads it from here. At 0.05 eV/Å, 31 of 47 end points still move by more than 10 degrees
+# when relaxed on to 0.01 eV/Å; from 0.01 to 0.005 eV/Å, 9 of 47 do. The environment variable
+# ``ALCHEMI_A04_RELAX_FMAX`` sets another value, for short runs on a CPU.
 RELAX_FMAX = float(os.environ.get("ALCHEMI_A04_RELAX_FMAX", "0.01"))  # eV/Å
 
 

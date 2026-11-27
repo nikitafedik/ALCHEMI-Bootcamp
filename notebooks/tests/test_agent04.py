@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Agent 04 owner tests: the saved default, the matrix Coulomb term, the check lines and the samples.
+"""Agent 04 tests: the saved default, the matrix Coulomb term, the check lines and the samples.
 
 The light tests need no GPU. The sample tests run every step check on the sample
 solutions and on each deliberately broken variant; they load AIMNet2 and are

@@ -1,11 +1,11 @@
 # Agent 06, "Hooked in at every step": default prompts
 
-The typical learner prompt of each step, saved again on 26 Nov 2026 from the
-step's text, table and Hints alone (revision after judging). The earlier
-wording was trialled on 26 Nov with a fresh mid-tier agent that had only the
-prompt, the session lines and the official `nvalchemi-toolkit` skill; this
-wording is not trialled yet. The result is drawn by the helper the step names; the
-agent returns the named variables and draws nothing.
+The typical learner prompt of each step, written from the step's text, table
+and Hints alone. An earlier wording was tried with a fresh mid-tier agent
+that had only the prompt, the session lines and the official
+`nvalchemi-toolkit` skill; the present wording has not been tried. The result
+is drawn by the helper the step names; the agent returns the named variables
+and draws nothing.
 
 | Step | File | Helper that shows the result |
 | --- | --- | --- |

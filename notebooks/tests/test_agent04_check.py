@@ -80,10 +80,10 @@ def test_main_rejects_an_unknown_step(capsys):
     assert "usage" in capsys.readouterr().out
 
 
-def test_fine_control_range_of_12_passes_and_failed_the_old_floor(monkeypatch):
+def test_fine_control_range_of_12_passes_and_fails_a_floor_of_15(monkeypatch):
     model = {"m": _Pipeline(_Coulomb(12.0))}
     assert check._coulomb_problems(model, "m") == []
-    monkeypatch.setattr(check, "MIN_COULOMB_RANGE", 15.0)  # the floor before 26 Nov
+    monkeypatch.setattr(check, "MIN_COULOMB_RANGE", 15.0)  # a floor above the example's range
     assert "12 Å; use at least 15 Å" in check._coulomb_problems(model, "m")[0]
 
 

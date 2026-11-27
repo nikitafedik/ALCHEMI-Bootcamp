@@ -3,9 +3,9 @@
 
 """Plotters of Agent 04, Made to order.
 
-``plot_interaction_curves`` (cells 9 and 21), ``plot_ncia_accuracy`` (cell 14),
-``show_single_molecule_check`` (cell 17) and ``show_conformers`` (cell 25). Each
-takes the names the learner's agent leaves in the notebook and does the rest.
+``plot_interaction_curves``, ``plot_ncia_accuracy``, ``show_single_molecule_check``
+and ``show_conformers``. Each takes the names the learner's agent leaves in the
+notebook and does the rest.
 Every plotter has three layers: a ``*_data`` function that returns the numbers,
 a ``build_*`` function that draws the Matplotlib figure in the course figure
 standard (``shared/alchemi-figure.mplstyle``, light, 920 px wide), and the
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from ase import Atoms
 
 # ---------------------------------------------------------------------------
-# Wording. Placeholders from the artist's mocks until the educator approves the text.
+# Wording: every text on a figure or a table
 # ---------------------------------------------------------------------------
 CURVES_LABELS = {
     "ylabel": "E(AB) - E(A) - E(B) [kcal/mol]",
@@ -68,22 +68,21 @@ ETHANOL_LABELS = {
     "empty": "–",
 }
 CONFORMERS_LABELS = {
-    # Resolved 26 Nov (l03-title-counts, option A): end points within 25 degrees count as one; they are
-    # minima only after a tight relaxation, so the title says "distinct end points".
+    # End points within 25 degrees count as one. They are minima only after a tight relaxation, so the
+    # title says "distinct end points".
     "title": "{n_starts} starts, {k} distinct end points",
     "xlabel": "phi [degrees]",
     "ylabel": "psi [degrees]",
     "source": "Mironov et al., J. Comput. Chem. 40, 297 (2019)",
     "minima": {"C7eq": "C7eq", "C5": "C5", "C7ax": "C7ax", "beta2": "beta2"},
 }
-# Draft result view under the conformer map: the lowest conformers ranked by energy.
+# Table of the lowest conformers ranked by energy, shown under the conformer viewer when SHOW_RANKING is True.
 RANKING_LABELS = {
     "title": "Lowest five conformers by energy",
     "header": ("Rank", "phi [degrees]", "psi [degrees]", "Energy above the lowest [kcal/mol]"),
 }
-SHOW_RANKING = False  # resolved 26 Nov (n04q-6, n04c-2): the map and the viewer stay as they were; True adds the table
-# Alternative texts of the pictures the helper draws: one sentence on what each shows
-# (fix pass 27 Nov: they were axis labels; drafts for the educator, DOUBLE CHECK).
+SHOW_RANKING = False  # False: show_conformers shows the map and the viewer; True adds the ranking table
+# Alternative texts of the pictures the helper draws: one sentence on what each shows.
 ALT_TEXTS = {
     "curves": ("Interaction energy against separation for each molecule pair, one line per model and the "
                "CCSD(T)/CBS reference as open circles, with each model's MAE in the legend."),
@@ -100,7 +99,7 @@ ALT_TEXTS = {
 # Science constants
 # ---------------------------------------------------------------------------
 KCAL_PER_EV = 23.0605
-# Panel order of the scans (the mock's order), by ``system_name``.
+# Panel order of the scans, by ``system_name``.
 PANEL_ORDER = ("ammonia - benzoate", "phenol - N-methylacetamide", "propyne - methyl azide")
 # Line order: the keywords the learner may pass, plus "d3" which the helper computes.
 CURVE_ORDER = ("base", "d3", "no_d3", "wrapped", "composed")
@@ -233,7 +232,7 @@ def mae(predicted: Any, reference: Any) -> float:
 
 
 # ---------------------------------------------------------------------------
-# 1. Interaction curves (cells 9 and 21)
+# 1. Interaction curves
 # ---------------------------------------------------------------------------
 _D3_SCAN_CACHE: dict[str, np.ndarray] = {}
 
@@ -368,7 +367,7 @@ def plot_interaction_curves(scan_labels: Sequence[Mapping[str, Any]], **energies
 
 
 # ---------------------------------------------------------------------------
-# 2. NCIA accuracy (cell 14)
+# 2. NCIA accuracy
 # ---------------------------------------------------------------------------
 def ncia_accuracy_data(ncia_energy: Any, reference: Any = None) -> dict[str, Any]:
     """Return predicted and reference interaction energies (kcal/mol) and their MAE."""
@@ -417,7 +416,7 @@ def plot_ncia_accuracy(ncia_energy: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Single-molecule check (cell 17)
+# 3. Single-molecule check
 # ---------------------------------------------------------------------------
 def _ethanol() -> Atoms:
     from ase.build import molecule
@@ -452,8 +451,8 @@ def _largest_force(model: Any, atoms: Atoms, device: torch.device) -> float:
     return float(forces.norm(dim=-1).max())
 
 
-def _relax(model: Any, atoms: Atoms, device: torch.device) -> tuple[Atoms, float]:
-    """Relax one structure with Toolkit's L-BFGS to ``ETHANOL_FMAX``; return (atoms, fmax)."""
+def _relax(model: Any, atoms: Atoms, device: torch.device) -> Atoms:
+    """Relax one structure with Toolkit's L-BFGS to ``ETHANOL_FMAX``; return the relaxed structure."""
 
     from nvalchemi.dynamics import LBFGS, ConvergenceHook, FusedStage
 
@@ -470,7 +469,7 @@ def _relax(model: Any, atoms: Atoms, device: torch.device) -> tuple[Atoms, float
         batch = stage.run(batch, n_steps=ETHANOL_MAX_STEPS + 10)
     relaxed = atoms.copy()
     relaxed.positions = batch.positions.detach().cpu().numpy()
-    return relaxed, float(batch.forces.detach().norm(dim=-1).max())
+    return relaxed
 
 
 def _config_snapshot(*models: Any) -> list[tuple[Any, set[str]]]:
@@ -496,7 +495,12 @@ def single_molecule_check_data(aimnet_model: Any, composed_model: Any) -> dict[s
     The learner's models leave with the outputs they came in with.
     """
 
-    from nvalchemi.models import DFTD3ModelWrapper, PipelineGroup, PipelineModelWrapper, PipelineStep
+    from nvalchemi.models import (
+        DFTD3ModelWrapper,
+        PipelineGroup,
+        PipelineModelWrapper,
+        PipelineStep,
+    )
 
     from .agent04 import DirectCoulombAdapter, d3_settings
 
@@ -527,35 +531,26 @@ def single_molecule_check_data(aimnet_model: Any, composed_model: Any) -> dict[s
                 "active_outputs", {"energy", "forces"} if name == "network" else {"energy", "forces", "charges"}
             )
         force = {name: _largest_force(model, atoms, device) for name, model in models.items()}
-        oh, fmax_end = {}, {}
-        for name in ("network", "all"):
-            relaxed, fmax_end[name] = _relax(models[name], atoms, device)
-            oh[name] = _oh_length(relaxed)
+        oh = {name: _oh_length(_relax(models[name], atoms, device)) for name in ("network", "all")}
     finally:
         for module, active in snapshot:
             module.model_config.active_outputs = set(active)
-    return {"largest_force": force, "oh_relaxed": oh, "fmax_end": fmax_end}
+    return {"largest_force": force, "oh_relaxed": oh}
 
 
-@_styled
-def build_single_molecule_table(data: Mapping[str, Any]) -> Any:
-    """Draw the ethanol table: bold header in the title size, body in the body size."""
+def _draw_table(axis: Any, header: Sequence[str], rows: Sequence[Sequence[str]], edges: Sequence[float]) -> None:
+    """Draw a table on ``axis``: a bold header in the title size, a rule under each row.
+
+    ``edges`` holds the left edge of each column and the right edge of the last, as shares of the
+    width. The first column is aligned left, the others right.
+    """
 
     pal = _PALETTE
-    figure, axis = _figure((len(ETHANOL_LABELS["rows"]) + 1) * _TABLE_ROW_PX / 100 + 0.084)
-    axis.axis("off")
-    header = ETHANOL_LABELS["header"]
-    rows = []
-    for key, label in ETHANOL_LABELS["rows"].items():
-        oh = data["oh_relaxed"].get(key)
-        rows.append(
-            [label, f"{data['largest_force'][key]:.2f}", ETHANOL_LABELS["empty"] if oh is None else f"{oh:.3f}"]
-        )
-    n, ncol = len(rows) + 1, len(header)
-    align = ["left"] + ["right"] * (ncol - 1)
+    n = len(rows) + 1
+    align = ["left"] + ["right"] * (len(header) - 1)
 
     def x_of(k: int) -> float:
-        return k / ncol + 0.02 if align[k] == "left" else (k + 1) / ncol - 0.02
+        return edges[k] + 0.02 if align[k] == "left" else edges[k + 1] - 0.02
 
     for k, text in enumerate(header):
         axis.text(x_of(k), 1 - 0.5 / n, text, ha=align[k], va="center", fontweight="bold",
@@ -567,6 +562,23 @@ def build_single_molecule_table(data: Mapping[str, Any]) -> Any:
         for k, text in enumerate(row):
             axis.text(x_of(k), y, text, ha=align[k], va="center", color=pal["ink2"], transform=axis.transAxes)
         axis.plot([0, 1], [1 - (r + 1) / n] * 2, color=pal["rule"], lw=0.8, transform=axis.transAxes)
+
+
+@_styled
+def build_single_molecule_table(data: Mapping[str, Any]) -> Any:
+    """Draw the ethanol table: bold header in the title size, body in the body size."""
+
+    figure, axis = _figure((len(ETHANOL_LABELS["rows"]) + 1) * _TABLE_ROW_PX / 100 + 0.084)
+    axis.axis("off")
+    header = ETHANOL_LABELS["header"]
+    rows = []
+    for key, label in ETHANOL_LABELS["rows"].items():
+        oh = data["oh_relaxed"].get(key)
+        rows.append(
+            [label, f"{data['largest_force'][key]:.2f}", ETHANOL_LABELS["empty"] if oh is None else f"{oh:.3f}"]
+        )
+    ncol = len(header)
+    _draw_table(axis, header, rows, [k / ncol for k in range(ncol + 1)])
     return figure
 
 
@@ -582,7 +594,7 @@ def show_single_molecule_check(aimnet_model: Any, composed_model: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Conformers (cell 25)
+# 4. Conformers
 # ---------------------------------------------------------------------------
 def batch_phi_psi(batch: Any) -> np.ndarray:
     """Return (phi, psi) in degrees for every graph of a batch of alanine dipeptide, shape (n, 2)."""
@@ -681,7 +693,6 @@ def _whole_degrees(value: float) -> str:
 def build_ranking_table(data: Mapping[str, Any]) -> Any:
     """Draw the lowest conformers by energy, drawn like the ethanol table, with a title above."""
 
-    pal = _PALETTE
     ranking = data["ranking"]
     n = len(ranking) + 1
     figure, axis = _figure((n * _TABLE_ROW_PX + _RANKING_TITLE_PX) / 100 + 0.084)
@@ -692,22 +703,7 @@ def build_ranking_table(data: Mapping[str, Any]) -> Any:
         [str(r["rank"]), _whole_degrees(r["phi"]), _whole_degrees(r["psi"]), f"{r['energy_above_kcal_mol']:.2f}"]
         for r in ranking
     ]
-    edges = np.concatenate([[0.0], np.cumsum(_RANKING_WIDTHS)])
-    align = ["left"] + ["right"] * (len(header) - 1)
-
-    def x_of(k: int) -> float:
-        return edges[k] + 0.02 if align[k] == "left" else edges[k + 1] - 0.02
-
-    for k, text in enumerate(header):
-        axis.text(x_of(k), 1 - 0.5 / n, text, ha=align[k], va="center", fontweight="bold",
-                  fontsize=plt.rcParams["axes.titlesize"],  # 15 px header size of the style
-                  color=pal["ink"], transform=axis.transAxes)
-    axis.plot([0, 1], [1 - 1 / n] * 2, color=pal["ink"], lw=1.2, transform=axis.transAxes)
-    for r, row in enumerate(rows, 1):
-        y = 1 - (r + 0.5) / n
-        for k, text in enumerate(row):
-            axis.text(x_of(k), y, text, ha=align[k], va="center", color=pal["ink2"], transform=axis.transAxes)
-        axis.plot([0, 1], [1 - (r + 1) / n] * 2, color=pal["rule"], lw=0.8, transform=axis.transAxes)
+    _draw_table(axis, header, rows, np.concatenate([[0.0], np.cumsum(_RANKING_WIDTHS)]))
     return figure
 
 
@@ -724,7 +720,7 @@ def build_conformers_figure(data: Mapping[str, Any]) -> Any:
         dx, dy = _MINIMA_OFFSETS[key]
         axis.plot(phi, psi, "D", ms=8, mfc="none", mec=pal["ink"], mew=1.4, zorder=4)
         axis.text(phi + dx, psi + dy, CONFORMERS_LABELS["minima"][key], color=pal["ink"], fontweight="bold",
-                  zorder=5, bbox=dict(boxstyle="round,pad=0.15", fc=pal["ring"], ec="none"))
+                  zorder=5, bbox={"boxstyle": "round,pad=0.15", "fc": pal["ring"], "ec": "none"})
     axis.set_xlim(-180 - _MAP_PAD_DEG, 180 + _MAP_PAD_DEG)
     axis.set_ylim(-180 - _MAP_PAD_DEG, 180 + _MAP_PAD_DEG)
     axis.set_xticks(range(-180, 181, 90))

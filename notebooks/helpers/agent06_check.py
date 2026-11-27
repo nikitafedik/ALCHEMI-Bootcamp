@@ -46,7 +46,6 @@ import contextlib
 import os
 import sys
 import time
-import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,7 +77,7 @@ RECOMPUTED = 0.2  # kcal/mol: a record and the same saved frame recomputed agree
 RECORD_EVERY = 10  # MD steps between records, as the first step asks
 SAME_RUN = 0.05  # Å: two runs that start the same way give the same nearest contacts this well
 _SCRIPT_NAMES = {"__file__"}  # names a script has and a notebook cell does not
-# a file that assigns names of an earlier step again: one note, the step passes (advisor, 26 Nov)
+# a file that assigns names of an earlier step again gets this note, and the step passes
 CHANGED_LINE = "{step}: " + UNEXPECTED + "{file} assigned {name} again; the cells above now show this run"
 DIGITS = {"Hartree": 4}  # decimals of an energy in the check's lines; other units: 2
 SAME_LINE = (
@@ -145,6 +144,15 @@ def _distances(positions: np.ndarray, masses: np.ndarray, split: int) -> tuple[n
     com_b = (b * masses[split:]).sum(1) / masses[split:].sum()
     pair = np.linalg.norm(a[:, :, None, :] - b[:, None, :, :], axis=-1)
     return np.linalg.norm(com_a - com_b, axis=1), pair.reshape(len(positions), -1).min(axis=1)
+
+
+def _nearest_contacts(ns: dict, positions: list[np.ndarray]) -> list[np.ndarray]:
+    """Nearest contact of each complex at each frame, in Å: one array (frames,) per complex."""
+
+    return [
+        _distances(p, _array(data.atomic_masses).astype(float).reshape(-1, 1), int(split))[1]
+        for p, data, split in zip(positions, ns["complexes"], ns["fragment_a_sizes"])
+    ]
 
 
 def _store_positions(ns: dict, name: str, problems: list[str]) -> list[np.ndarray] | None:
@@ -409,13 +417,7 @@ def check_separation_hook(ns: dict, ctx: dict) -> list[str]:
     with contextlib.suppress(Exception):  # the first run's frames, when they sit on the same records
         positions = store_frames(ns["plain_store"])["positions"]
         if len(positions[0]) == n:
-            nearest = np.stack(
-                [
-                    _distances(p, _array(data.atomic_masses).astype(float).reshape(-1, 1), int(split))[1]
-                    for p, data, split in zip(positions, ns["complexes"], ns["fragment_a_sizes"])
-                ],
-                axis=1,
-            )
+            nearest = np.stack(_nearest_contacts(ns, positions), axis=1)
             gap = float(np.abs(nearest - _array(ns["nearest_contact"]).astype(float)).max())
             if gap > SAME_RUN:
                 out.append(
@@ -538,10 +540,7 @@ def check_retire(ns: dict, ctx: dict) -> list[str]:
             "one that ran to the end; the saved frames tell which complex was stopped"
         )
     # one limit for every complex: a complex that ran on never reached the contact at which another was retired
-    nearest = []
-    for k, (data, split) in enumerate(zip(ns["complexes"], ns["fragment_a_sizes"])):
-        masses = _array(data.atomic_masses).astype(float).reshape(-1, 1)
-        nearest.append(_distances(positions[k], masses, int(split))[1])
+    nearest = _nearest_contacts(ns, positions)
     at_stop = min(float(nearest[k][-1]) for k in retired)
     for k in range(N_COMPLEXES):
         if k not in retired and float(nearest[k].max()) > at_stop + SAME_LIMIT:
@@ -646,17 +645,12 @@ def _in_folder(folder: Path):
 def _run_file(path: Path, ns: dict) -> Exception | None:
     """Run one step file in the notebook's namespace; its own prints go to stderr."""
 
-    started, real_out = time.time(), sys.stdout
-    sys.stdout = sys.stderr  # the file's own prints must not mix with the verdict lines
+    started = time.time()
     try:
-        exec(compile(path.read_text(), str(path), "exec"), ns)
+        with contextlib.redirect_stdout(sys.stderr):  # the file's own prints must not mix with the verdict lines
+            exec(compile(path.read_text(), str(path), "exec"), ns)
     except Exception as exc:
-        sys.stdout = real_out
-        if os.environ.get("AGENT06_TRACE"):
-            traceback.print_exc()
         return exc
-    finally:
-        sys.stdout = real_out
     print(f"  ({path.name} ran in {time.time() - started:.1f} s)", file=sys.stderr, flush=True)
     return None
 
@@ -675,11 +669,8 @@ def setup_namespace(n_steps: int | None = None) -> dict:
     """Run the setup cell and return its namespace; ``n_steps`` shortens the run."""
 
     ns: dict[str, Any] = {"__name__": "__main__"}
-    real_out, sys.stdout = sys.stdout, sys.stderr
-    try:
+    with contextlib.redirect_stdout(sys.stderr):
         exec(SETUP_CELL, ns)
-    finally:
-        sys.stdout = real_out
     if n_steps is not None:
         ns["run_settings"]["n_steps"] = int(n_steps)
     return ns
@@ -699,6 +690,60 @@ def _changed(step: str, file: str, before: dict[str, Any], ns: dict) -> list[str
     return [CHANGED_LINE.format(step=step, file=file, name=", ".join(names))] if names else []
 
 
+def _run_earlier_files(step: str, work_dir: Path, ns: dict) -> list[str]:
+    """Run the files of the steps before ``step``; return one line if a file it needs is missing or fails."""
+
+    for earlier in list(STEPS)[: list(STEPS).index(step)]:
+        path = work_dir / STEPS[earlier].file
+        if earlier in STEPS[step].after:
+            if not path.exists():
+                return [f"{step}: the earlier step file {path.name} is missing in {work_dir}"]
+            error = _run_file(path, ns)
+            if error is not None:
+                return [f"{step}: an earlier file failed: {path.name}: {_first_line(error)}"]
+        elif earlier in OPTIONAL_STEPS and path.exists():
+            _run_file(path, ns)  # the "Try it" file runs if it is there; its errors are its own
+    return []
+
+
+def _run_step_file_twice(step: str, path: Path, ns: dict) -> tuple[list[Any], list[str]]:
+    """Run the step file twice, the second time as a learner running the cell again.
+
+    Returns the hooks the last run registered, and one line if a run failed.
+    """
+
+    spec = STEPS[step]
+    hooks: list[Any] = []
+    for attempt in (1, 2):
+        with _WatchHooks() as watch:
+            error = _run_file(path, ns)
+        hooks = watch.hooks
+        if error is None:
+            continue
+        if isinstance(error, NameError) and getattr(error, "name", None) in _SCRIPT_NAMES:
+            return hooks, [f"{step}: {spec.file} uses {error.name}, which does not exist in a notebook cell; remove that line"]
+        if isinstance(error, NameError) and getattr(error, "name", None):
+            return hooks, [f"{step}: {spec.file} uses {error.name}, which no earlier cell defines; define it in this file"]
+        again = " a second time" if attempt == 2 else ""
+        return hooks, [f"{step}: running {spec.file}{again} failed: {_first_line(error)}"]
+    return hooks, []
+
+
+def _contract_problems(step: str, ns: dict, ctx: dict) -> list[str]:
+    """One line per name the step did not leave; when all are there, the lines of the step's checks."""
+
+    spec = STEPS[step]
+    problems = [f"{step}: {name} is missing; the step asks for it" for name in spec.names if name not in ns]
+    if problems:
+        return problems
+    for check in spec.checks:
+        try:
+            problems += [f"{step}: {line}" for line in check(ns, ctx)]
+        except Exception as exc:
+            problems.append(f"{step}: the check could not read the results: {_first_line(exc)}")
+    return problems
+
+
 def check_step(step: str, work_dir: Path | None = None, ns: dict | None = None) -> list[str]:
     """Run ``step`` after the earlier steps in one namespace; return one line per problem.
 
@@ -716,44 +761,20 @@ def check_step(step: str, work_dir: Path | None = None, ns: dict | None = None) 
         ns = setup_namespace(int(short) if short else None)
     if elsewhere:
         ns["work_dir"] = work_dir  # the files write beside themselves, not into notebooks/agent06_work
-    changed: list[str] = []  # earlier names the step file assigned again: a note, not a failure
     with _in_folder(work_dir.parent):
-        for earlier in list(STEPS)[: list(STEPS).index(step)]:
-            path = work_dir / STEPS[earlier].file
-            if earlier in spec.after:
-                if not path.exists():
-                    return [f"{step}: the earlier step file {path.name} is missing in {work_dir}"]
-                error = _run_file(path, ns)
-                if error is not None:
-                    return [f"{step}: an earlier file failed: {path.name}: {_first_line(error)}"]
-            elif earlier in OPTIONAL_STEPS and path.exists():
-                _run_file(path, ns)  # the "Try it" file runs if it is there; its errors are its own
+        stopped = _run_earlier_files(step, work_dir, ns)
+        if stopped:
+            return stopped
         path = work_dir / spec.file
         if not path.exists():
             return [f"{step}: the step file {spec.file} is missing in {work_dir}"]
         kept = _earlier_names(ns, step)  # as the earlier steps left them
-        ctx: dict[str, Any] = {}
-        for attempt in (1, 2):  # the second run is a learner running the cell again
-            with _WatchHooks() as watch:
-                error = _run_file(path, ns)
-            ctx["hooks"] = watch.hooks
-            if error is None:
-                continue
-            if isinstance(error, NameError) and getattr(error, "name", None) in _SCRIPT_NAMES:
-                return [f"{step}: {spec.file} uses {error.name}, which does not exist in a notebook cell; remove that line"]
-            if isinstance(error, NameError) and getattr(error, "name", None):
-                return [f"{step}: {spec.file} uses {error.name}, which no earlier cell defines; define it in this file"]
-            again = " a second time" if attempt == 2 else ""
-            return [f"{step}: running {spec.file}{again} failed: {_first_line(error)}"]
-        changed += _changed(step, spec.file, kept, ns)
-        problems = [f"{step}: {name} is missing; the step asks for it" for name in spec.names if name not in ns]
-        if not problems:
-            for check in spec.checks:
-                try:
-                    problems += [f"{step}: {line}" for line in check(ns, ctx)]
-                except Exception as exc:
-                    problems.append(f"{step}: the check could not read the results: {_first_line(exc)}")
-    problems += changed
+        hooks, stopped = _run_step_file_twice(step, path, ns)
+        if stopped:
+            return stopped
+        problems = _contract_problems(step, ns, {"hooks": hooks})
+        # earlier names the step file assigned again: a note, not a failure
+        problems += _changed(step, spec.file, kept, ns)
     notes = [line for line in problems if line.startswith(f"{step}: {UNEXPECTED}")]
     failures = [line for line in problems if line not in notes]
     return failures + notes if failures else [f"{step}: OK ({len(spec.names)} names)"] + notes

@@ -13,7 +13,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from .agent06_views import plot_displacement, plot_interaction, plot_separation, show_retired, show_run
+from .agent06_views import (
+    plot_displacement,
+    plot_interaction,
+    plot_separation,
+    show_retired,
+    show_run,
+)
 from .common import configure_tutorial as _configure_tutorial
 
 __all__ = [
@@ -32,13 +38,13 @@ WORK_DIR = Path(__file__).resolve().parents[1] / "agent06_work"
 NOTEBOOK = "notebooks/alchemi-agent-06-hooked-in-at-every-step.ipynb"
 
 # The three default complexes, in the order of ``complexes``: saved, verified structures
-# (see data/agent06/README.md). To change a complex, change its file name here.
+# (see data/agent06/README.md). To change a complex, change its file name here. A second
+# choice for the third complex is saved beside it:
+# "complex-3-alternative-pyrrole-n-methylpropan-2-imine.xyz".
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "agent06"
 DEFAULT_COMPLEX_FILES = (
     "complex-1-phenol-n-methylacetamide.xyz",
     "complex-2-propyne-methyl-azide.xyz",
-    # the selection trial's recommendation (marked DOUBLE CHECK for the educator); saved alternative:
-    # "complex-3-alternative-pyrrole-n-methylpropan-2-imine.xyz"
     "complex-3-phenol-n-methylpropan-2-imine.xyz",
 )
 
@@ -242,7 +248,7 @@ def prepare_complexes():
         )
         data.add_node_property("forces", torch.zeros_like(data.positions))
         complexes.append(data)
-    return complexes, _composed_model(device), [int(n) for n in fragment_a_sizes]
+    return complexes, _composed_model(device), fragment_a_sizes
 
 
 if __name__ == "__main__":

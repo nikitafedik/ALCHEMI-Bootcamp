@@ -294,7 +294,7 @@ def test_show_ranking_switch(switch, images, monkeypatch) -> None:
 
 
 def test_every_picture_has_a_one_sentence_alt_text():
-    """Fix pass 27 Nov: alt texts say what each picture shows; they were axis labels."""
+    """Alt texts say what each picture shows, in one sentence; they are not the axis labels."""
 
     import inspect
     import re as _re

@@ -29,12 +29,6 @@ from helpers import agent06_views as views
 
 PLAN = _NOTEBOOK_DIR / "alchemi-agent-06-hooked-in-at-every-step.plan.md"
 NOTEBOOK = _NOTEBOOK_DIR / "alchemi-agent-06-hooked-in-at-every-step.ipynb"
-# The candidate notebook of plan 3.1 (outside the repository, on the build workstation). The
-# notebook itself changes only with text from the board; until then it loads the old first step.
-CANDIDATE = (
-    _NOTEBOOK_DIR.parents[1]
-    / "notes/evidence/agent-06/candidate/alchemi-agent-06-hooked-in-at-every-step.candidate.ipynb"
-)
 DATA = _NOTEBOOK_DIR / "data" / "agent06"
 SOLUTIONS = _NOTEBOOK_DIR.parent / "solutions" / "agent-06"
 
@@ -162,18 +156,13 @@ def _plan_text() -> str:
     return PLAN.read_text()
 
 
-@pytest.fixture(params=["notebook", "candidate"])
-def notebook_cells(request):
-    """The cells of the notebook, and of the candidate notebook of plan 3.1 when it is on this machine."""
+@pytest.fixture
+def notebook_cells():
+    """The cells of the notebook."""
 
-    path = NOTEBOOK if request.param == "notebook" else CANDIDATE
-    if not path.exists():
-        pytest.skip(f"{request.param} not present")
-    cells = json.loads(path.read_text())["cells"]
-    code = "\n".join("".join(c["source"]) for c in cells if c["cell_type"] == "code")
-    if request.param == "notebook" and "agent06_work/plain_run.py" in code:
-        pytest.skip("the notebook waits for the board text of plan 3.1; the candidate notebook is tested")
-    return cells
+    if not NOTEBOOK.exists():
+        pytest.skip("notebook not present")
+    return json.loads(NOTEBOOK.read_text())["cells"]
 
 
 def test_every_plan_table_matches_its_contract():
@@ -212,7 +201,7 @@ def test_notebook_calls_use_the_contract_names(notebook_cells):
     assert "helpers.show_retired(stop_step, final_status, retire_store)" in code
 
 
-def test_notebook_has_no_saved_outputs_and_board_ids(notebook_cells):
+def test_notebook_has_no_saved_outputs_and_numbered_cell_ids(notebook_cells):
     cells = notebook_cells
     assert all(re.fullmatch(r"a06-\d\d", c["id"]) for c in cells)
     assert all(not c.get("outputs") and c.get("execution_count") is None for c in cells if c["cell_type"] == "code")

@@ -1,6 +1,6 @@
 # Agent 06, "Hooked in at every step": sample step files
 
-One file per `%load` step of plan 3.1 of
+One file per `%load` step of
 `notebooks/alchemi-agent-06-hooked-in-at-every-step.ipynb` (Toolkit 0.3.0).
 Each file passes its step check. The default prompt of each step is in
 `prompts.md`.
@@ -31,8 +31,8 @@ the step.
 Notes on the samples:
 
 - `interaction.py` records the interaction energy in kcal/mol with a hook of
-  its own; the check also takes eV and kJ/mol and reads the unit from the
-  starting values.
+  its own; the check also takes eV, kJ/mol and Hartree and reads the unit
+  from the starting values.
 - All four runs start from rest with `random_seed=0`, so every later file
   follows the run of `interaction.py`: the distances of `separation_hook.py`
   sit on its `saved_step`, and `retire.py` follows the plotted trajectory.
@@ -41,5 +41,5 @@ Notes on the samples:
   azide is retired at step 490. Another device or seed gives other peaks and
   needs another limit.
 - `stop_step` holds -1 for a complex that ran to the end.
-- `plain_run.py` belongs to the notebook of 25 Nov; plan 3.1 has no such
-  step and the check no longer knows it.
+- `plain_run.py` is the plain run alone: saved frames and a log, without the
+  interaction energy. No step of the notebook loads it and it has no check.

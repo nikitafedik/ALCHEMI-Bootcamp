@@ -1,11 +1,10 @@
 # Agent 04, Made to order: the default prompt of each step
 
 The typical learner prompt for each step, written from the step's text,
-table and Hints alone. The prompts of 25 and 26 Nov were tried with a fresh
-mid-tier agent (Sonnet) that had only the prompt, the session lines and the
-skill path; the conformer prompt was saved again on 26 Nov from the revised
-step (its Hint now gives the return format) and has not been tried in this
-form. Records: `notes/evidence/agent-04/` (outside the repository).
+table and Hints alone. The prompts were tried with a fresh mid-tier agent
+that had only the prompt, the session lines and the skill path. The
+conformer prompt changed after that, when the step's Hint began to give the
+return format, and has not been tried in its present form.
 
 In every step the agent returns variables only and draws nothing. The
 notebook's result cell calls the helper that shows them, and the step check,
@@ -52,7 +51,7 @@ The notebook prints this prompt (sample: `compose_run.py`):
 ```
 
 A short prompt in the input and output form of the open tasks also works
-(tried once, trial T7: passed on the second attempt):
+(tried once: it passed on the second attempt):
 
 ```text
 add what aimnet2 leaves out: d3 dispersion, and electrostatics that uses the charges aimnet2 predicts

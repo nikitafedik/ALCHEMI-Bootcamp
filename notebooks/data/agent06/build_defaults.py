@@ -41,9 +41,8 @@ FROM_NCIA250 = (
 
 
 # Interaction energy at the saved geometry with the composed model of the notebook (AIMNet2 with
-# its Coulomb and D3 terms), in eV: measured on a CPU with nvalchemi-toolkit 0.3.0 by
-# notes/evidence/agent-06/l06-defaults--20261126-owner/verify_defaults.py. The views read the
-# learner's energy unit from these values.
+# its Coulomb and D3 terms), in eV, measured on a CPU with nvalchemi-toolkit 0.3.0. The views
+# read the learner's energy unit from these values.
 COMPOSED_MODEL_EV = {
     "complex-1-phenol-n-methylacetamide.xyz": -0.502232,
     "complex-2-propyne-methyl-azide.xyz": -0.132802,

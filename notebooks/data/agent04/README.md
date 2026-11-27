@@ -29,9 +29,9 @@ python -c "from helpers import agent04; print(agent04.build_dipeptide_default())
 
 Check (SHA-256 of the file as saved): `a19f82135911ac7c0ec6b9a7009190b2665e6cd12e81a1780e20f433041f7556`.
 
-Verification (details in `notes/evidence/agent-04/`): all atoms are H, C, N or
-O, covered by the AIMNet2 checkpoint; the 139 starts relax in one batch with the
-composed model, all of them to the step's threshold
+Verification: all atoms are H, C, N or O, covered by the AIMNet2 checkpoint;
+the 139 starts relax in one batch with the composed model, all of them to the
+step's threshold
 (`helpers.relax_settings()["fmax"]`, 0.01 eV/Å: 824 s on a CPU with 4 threads,
 a few seconds on a GPU); `python -m helpers.agent04 check conformers` passes on
 the sample solution.

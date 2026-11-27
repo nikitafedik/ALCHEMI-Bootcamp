@@ -9,13 +9,13 @@ to the course figure standard (light only, 920 px wide, Open Sans). A view
 that has something to say about its result prints one line under it. Each ``build_*`` and ``*_data``
 function is free of display calls, so the tests can read what a view shows.
 
-Every word on a figure or a table comes from the notebook's text: the wording
-lives in ``LABELS`` and is the educator's to change.
+Every word on a figure or a table lives in ``LABELS``, in one place.
 """
 
 from __future__ import annotations
 
 import contextlib
+import warnings
 from base64 import b64encode
 from html import escape
 from io import BytesIO
@@ -271,8 +271,6 @@ def _player(frames: dict[str, Any], names: list[str]):
 
     from IPython.display import HTML
 
-    import warnings
-
     document = player_html(frames, names)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)  # IPython suggests IFrame for the player's srcdoc
@@ -294,7 +292,7 @@ def _show_player(store: Any) -> None:
 
 
 # --------------------------------------------------------------------------
-# Cell 9: show_run
+# show_run
 # --------------------------------------------------------------------------
 
 
@@ -411,9 +409,12 @@ def interaction_line(data: dict[str, Any]) -> str:
 def build_interaction_figure(saved_step, interaction_energy, start_interaction_energy):
     """One panel per complex: interaction energy against the MD step, a dashed line at the starting value."""
 
+    return _interaction_figure(interaction_data(saved_step, interaction_energy, start_interaction_energy))
+
+
+def _interaction_figure(data: dict[str, Any]):
     import matplotlib.pyplot as plt
 
-    data = interaction_data(saved_step, interaction_energy, start_interaction_energy)
     labels = LABELS["interaction"]
     count = len(data["names"])
     with _course_style():
@@ -442,7 +443,7 @@ def plot_interaction(saved_step, interaction_energy, start_interaction_energy) -
     from IPython.display import Markdown, display
 
     data = interaction_data(saved_step, interaction_energy, start_interaction_energy)
-    _show(build_interaction_figure(saved_step, interaction_energy, start_interaction_energy), LABELS["interaction"]["alt"])
+    _show(_interaction_figure(data), LABELS["interaction"]["alt"])
     display(Markdown(interaction_line(data)))
 
 
@@ -513,11 +514,12 @@ def build_separation_figure(saved_step, separation, nearest_contact, interaction
     With ``interaction_energy`` a row above shows it on the same steps.
     """
 
+    return _separation_figure(separation_data(saved_step, separation, nearest_contact, interaction_energy))
+
+
+def _separation_figure(data: dict[str, Any]):
     import matplotlib.pyplot as plt
 
-    from . import agent06
-
-    data = separation_data(saved_step, separation, nearest_contact, interaction_energy)
     labels = LABELS["separation"]
     count = len(data["names"])
     with _course_style():
@@ -560,12 +562,12 @@ def plot_separation(saved_step, interaction_energy, separation, nearest_contact=
         interaction_energy, separation, nearest_contact = None, interaction_energy, separation
     data = separation_data(saved_step, separation, nearest_contact, interaction_energy)
     alt = LABELS["separation"]["alt" if interaction_energy is None else "alt_energy"]
-    _show(build_separation_figure(saved_step, separation, nearest_contact, interaction_energy), alt)
+    _show(_separation_figure(data), alt)
     display(Markdown(separation_line(data)))
 
 
 # --------------------------------------------------------------------------
-# Cell 19: plot_displacement
+# plot_displacement
 # --------------------------------------------------------------------------
 
 
@@ -577,7 +579,7 @@ def displacement_data(plain_store, frozen_store, frozen_mask) -> dict[str, Any]:
     ``same_frames``, True when a store kept one state for every frame.
     """
 
-    mask = np.asarray(_array(frozen_mask)).astype(bool).reshape(-1)
+    mask = _array(frozen_mask).astype(bool).reshape(-1)
     out: dict[str, Any] = {"mask": mask, "same_frames": False}
     for key, store in (("plain", plain_store), ("frozen", frozen_store)):
         positions = store_frames(store)["positions"]
@@ -594,9 +596,12 @@ def displacement_data(plain_store, frozen_store, frozen_mask) -> dict[str, Any]:
 def build_displacement_figure(plain_store, frozen_store, frozen_mask):
     """Two panels, plain run and frozen run: distance of each atom from its start, by saved frame."""
 
+    return _displacement_figure(displacement_data(plain_store, frozen_store, frozen_mask))
+
+
+def _displacement_figure(data: dict[str, Any]):
     import matplotlib.pyplot as plt
 
-    data = displacement_data(plain_store, frozen_store, frozen_mask)
     labels = LABELS["displacement"]
     mask = data["mask"]
     with _course_style():
@@ -626,26 +631,23 @@ def plot_displacement(plain_store, frozen_store, frozen_mask) -> None:
 
     from IPython.display import Markdown, display
 
-    figure = build_displacement_figure(plain_store, frozen_store, frozen_mask)
-    if displacement_data(plain_store, frozen_store, frozen_mask)["same_frames"]:
-        import matplotlib.pyplot as plt
-
-        plt.close(figure)
+    data = displacement_data(plain_store, frozen_store, frozen_mask)
+    if data["same_frames"]:
         display(Markdown(LABELS["same_frames"]))
         return
-    _show(figure, LABELS["displacement"]["alt"])
+    _show(_displacement_figure(data), LABELS["displacement"]["alt"])
 
 
 # --------------------------------------------------------------------------
-# Cell 23: show_retired
+# show_retired
 # --------------------------------------------------------------------------
 
 
 def retired_rows(stop_step, final_status) -> list[list[Any]]:
     """One row per complex: its name and the step it was retired at, or "ran to the end"."""
 
-    step = np.asarray(_array(stop_step)).reshape(-1)
-    status = np.asarray(_array(final_status)).reshape(-1)
+    step = _array(stop_step).reshape(-1)
+    status = _array(final_status).reshape(-1)
     if step.shape[0] != status.shape[0]:
         raise ValueError(
             f"stop_step has {step.shape[0]} entries and final_status {status.shape[0]}; both hold one per complex"
@@ -658,7 +660,7 @@ def retired_rows(stop_step, final_status) -> list[list[Any]]:
 def retired_line(stop_step) -> str:
     """What happened, in plain words; it starts with "Unexpected" when several complexes were retired."""
 
-    step = np.asarray(_array(stop_step)).reshape(-1)
+    step = _array(stop_step).reshape(-1)
     labels = LABELS["retired"]
     names = complex_names(step.shape[0])
     retired = [k for k in range(step.shape[0]) if step[k] >= 0]
