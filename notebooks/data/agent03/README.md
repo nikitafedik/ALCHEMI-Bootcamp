@@ -25,9 +25,12 @@ elements, Z 1 to 83 and 89 to 94). This was read from the checkpoint file. All
 structures are periodic materials, which MACE-MPA-0 is trained on (MPTrj and
 sAlex).
 
-**Verification.** `notes/evidence/lesson-02/l02-speed-default--20261126-0202--03-opus.md`
-(result: partial; the time budget of the speed piece is open with the
-educator).
+**Verification.** Checked on 26 Nov 2026 by reading files, with no model run:
+the element table was read from the MACE-MPA-0 checkpoint, the licence and the
+reference lattice constants from the ASE 3.27.0 source, and the lattice
+constants of the compounds were compared with the published values in the
+table below. The memory and time of the set on the course GPU are in the next
+paragraph.
 
 **Memory and time on the course GPU.** Measured on the NVIDIA L40S (46,068
 MiB; PyTorch sees 44.39 GiB) on 27 Nov 2026, Toolkit 0.3.0, float32:
@@ -41,8 +44,7 @@ Without cuEquivariance the 200 crystals fill three quarters of the card. A
 second model of that kind in the same session can run out of memory even
 after `torch.cuda.empty_cache()`, because the freed memory is split into
 pieces. The sample of the speed step therefore times 50 crystals picked
-evenly from the batch (2,184 atoms, peak 9.5 GiB). Evidence:
-`notes/evidence/agent-03/l40s-20261127/`.
+evenly from the batch (2,184 atoms, peak 9.5 GiB).
 
 ### Sources of the lattice constants
 
@@ -126,9 +128,6 @@ Notes:
    entries for AgMg give 3.23 Å (COD 1509455, Williams 1972) and 3.302 Å
    (COD 1509457, Kinzhibalo and Zarechnyuk 1978).
 
-Full trace, including the script that compared the values:
-`notes/evidence/lesson-02/l02-speed-default--20261126-0202--03-opus/lattice_trace.md`.
-
 ## Temperature ladder default: `helpers.load_ladder_crystal()`
 
 **What.** `ladder-default-Cu-fcc-4x4x4.extxyz`: copper, fcc, 4 x 4 x 4
@@ -141,9 +140,7 @@ forces are zero by symmetry and the crystal needs no relaxation.
 **How built.** `ase.build.bulk("Cu", "fcc").repeat((4, 4, 4))` with ASE 3.27.0
 and ASE's built-in lattice constant a = 3.61 Å, written with
 `ase.io.write(..., format="extxyz")`. It is the cell of the course crystal
-`Cu-fcc-4x4x4` in `load_crystals`, without the 0.1 Å rattle. The file is
-byte for byte the one the advisor's ladder trial proposed
-(`notes/evidence/lesson-02/l02-temperature-ladder--20261126-0215--advisor-opus/make_default.py`).
+`Cu-fcc-4x4x4` in `load_crystals`, without the 0.1 Å rattle.
 
 **Source and licence.** Built with ASE (LGPL-2.1-or-later); no database is
 used. The lattice constant is ASE's reference value, which the ASE source
@@ -152,4 +149,8 @@ attributes to Ashcroft and Mermin, *Solid State Physics*.
 **Model fit.** Copper is in the MACE-MPA-0 element table, and a bulk metal is
 inside its training data (MPTrj and sAlex).
 
-**Verification.** `notes/evidence/lesson-02/l02-temperature-ladder--20261126-0300--owner03.md`.
+**Verification.** On 26 Nov 2026 the ladder step ran end to end on a CPU (4
+threads, Toolkit 0.3.0) with this crystal: the sample file
+`solutions/agent-03/temperature_ladder.py`, the view and the step check. On
+27 Nov 2026 the notebook ran at course size on the NVIDIA L40S; the ladder
+cell, with 12 temperatures, took 36.7 s.

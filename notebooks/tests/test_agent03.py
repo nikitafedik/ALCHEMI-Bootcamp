@@ -21,12 +21,12 @@ _NOTEBOOK_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_NOTEBOOK_DIR))
 
 import IPython.display as ipy_display
-from helpers import _agent03_loaders, agent03
+from helpers import _agent03_loaders, agent03, agent03_check
 
 PLAN = _NOTEBOOK_DIR / "alchemi-agent-03-ready-made.plan.md"
 # Draft exercises that are not in the plan or the notebook (the timestep scan left 03).
 DRAFT_STEPS = {"timestep_scan"}
-PLANNED_STEPS = {k: v for k, v in agent03.STEPS.items() if k not in DRAFT_STEPS}
+PLANNED_STEPS = {k: v for k, v in agent03_check.STEPS.items() if k not in DRAFT_STEPS}
 
 
 @pytest.fixture(autouse=True)
@@ -107,7 +107,7 @@ def test_plan_calls_use_these_arguments():
 
 
 def test_setup_cell_runs_the_planned_lines():
-    lines = agent03.SETUP_CELL.splitlines()
+    lines = agent03_check.SETUP_CELL.splitlines()
     assert lines[0] == "from helpers import agent03 as helpers"
     assert lines[1] == "helpers.configure_tutorial()"
     assert lines[2] == "work_dir = helpers.make_work_dir()"
@@ -115,19 +115,19 @@ def test_setup_cell_runs_the_planned_lines():
 
 
 def test_after_lists_follow_step_order():
-    order = list(agent03.STEPS)
+    order = list(agent03_check.STEPS)
     assert order == [
         "relax_build", "relax_run", "md_build", "md_run", "timestep_scan", "temperature_ladder", "speed_settings"
     ]
-    for step, spec in agent03.STEPS.items():
+    for step, spec in agent03_check.STEPS.items():
         assert all(order.index(a) < order.index(step) for a in spec.after), step
-    assert agent03.STEPS["speed_settings"].after == ["relax_build"]
-    assert agent03.STEPS["timestep_scan"].after == ["relax_build"]
-    assert agent03.STEPS["temperature_ladder"].after == ["relax_build"]
+    assert agent03_check.STEPS["speed_settings"].after == ["relax_build"]
+    assert agent03_check.STEPS["timestep_scan"].after == ["relax_build"]
+    assert agent03_check.STEPS["temperature_ladder"].after == ["relax_build"]
 
 
 def test_contract_units_and_shapes():
-    names = {n: s for step in agent03.STEPS.values() for n, s in step.names.items()}
+    names = {n: s for step in agent03_check.STEPS.values() for n, s in step.names.items()}
     assert names["start_max_force"].shape == ("n_structures",)
     assert names["start_max_force"].unit == "eV/Å"
     assert names["single_seconds"].shape == (3,)
@@ -157,7 +157,7 @@ def test_show_session_text(capsys):
 
 
 def test_every_step_name_is_its_file_name_without_py():
-    for step, spec in agent03.STEPS.items():
+    for step, spec in agent03_check.STEPS.items():
         assert spec.file == f"{step}.py"
 
 
@@ -499,9 +499,9 @@ def torch_nvalchemi():
 
 
 def _check(step, name, ns, n_crystals=3, **extra):
-    spec = agent03.STEPS[step].names[name]
+    spec = agent03_check.STEPS[step].names[name]
     syms = {"n_structures": n_crystals, **extra}
-    return agent03._check_name(step, name, spec, ns, syms)
+    return agent03_check._check_name(step, name, spec, ns, syms)
 
 
 def test_missing_name(torch_nvalchemi):
@@ -567,20 +567,20 @@ def test_md_build_messages(torch_nvalchemi):
     md_batch = _batch((2, 3))
     ns = {"crystal_batch": crystal_batch, "md_batch": md_batch, "n_crystals": 2}
     md_batch.velocities = None
-    problems = agent03._contract_extras("md_build", ns, {})
+    problems = agent03_check._contract_extras("md_build", ns, {})
     assert "md_build: md_batch should carry velocities; found none" in problems
     md_batch = _batch((2, 3))  # a batch from ASE atoms starts with zero velocities
     ns["md_batch"] = md_batch
     md_batch.status = torch.ones(2, 1, dtype=torch.long)
-    problems = agent03._contract_extras("md_build", ns, {})
+    problems = agent03_check._contract_extras("md_build", ns, {})
     assert problems == [
         "md_build: no graph of md_batch should be marked finished before the MD starts; "
         "found 2 of 2 marked finished (status 1 or more, left over from the relaxation)"
     ]
     md_batch.status = torch.zeros(2, 1, dtype=torch.long)
-    assert agent03._contract_extras("md_build", ns, {}) == []
+    assert agent03_check._contract_extras("md_build", ns, {}) == []
     ns["md_batch"] = _batch((2, 4))
-    assert agent03._same_graphs("md_build", "md_batch", ns) == [
+    assert agent03_check._same_graphs("md_build", "md_batch", ns) == [
         "md_build: md_batch should hold the same 2 graphs as crystal_batch "
         "(same atom counts, same order); found 2 graphs"
     ]
@@ -588,7 +588,7 @@ def test_md_build_messages(torch_nvalchemi):
 
 def test_relax_build_messages(torch_nvalchemi):
     batch = _batch((2, 3))
-    problems = agent03._contract_extras("relax_build", {"crystal_batch": batch, "n_crystals": 5}, {})
+    problems = agent03_check._contract_extras("relax_build", {"crystal_batch": batch, "n_crystals": 5}, {})
     assert problems == [
         "relax_build: crystal_batch should have 5 graphs (n_crystals); found 2"
     ]
@@ -600,9 +600,9 @@ def test_relax_run_threshold_message_allows_one_percent(torch_nvalchemi):
         "relaxed_max_force": torch.tensor([0.0504, 0.0300]),
         "force_threshold": 0.05,
     }
-    assert agent03._contract_extras("relax_run", ns, {}) == []
+    assert agent03_check._contract_extras("relax_run", ns, {}) == []
     ns["relaxed_max_force"] = torch.tensor([0.0600, 0.0300, 0.2])
-    assert agent03._contract_extras("relax_run", ns, {}) == [
+    assert agent03_check._contract_extras("relax_run", ns, {}) == [
         "relax_run: every relaxed_max_force should be at or below force_threshold (0.05 eV/Å); "
         "found 2 of 3 above it (largest 0.2 eV/Å)"
     ]
@@ -619,7 +619,7 @@ def _force_case(torch):
 def test_largest_force_is_the_vector_length(torch_nvalchemi, monkeypatch):
     torch = torch_nvalchemi
     forces = _force_case(torch)
-    monkeypatch.setattr(agent03, "prepare_model_batch", lambda batch, model: batch)
+    monkeypatch.setattr(agent03_check, "prepare_model_batch", lambda batch, model: batch)
     calls = []
 
     def model(batch):
@@ -628,12 +628,12 @@ def test_largest_force_is_the_vector_length(torch_nvalchemi, monkeypatch):
 
     ns = {"crystal_batch": _batch((2, 3)), "mace_model": model, "n_crystals": 2}
     ns["start_max_force"] = torch.tensor([5.0, 2.0])
-    assert agent03._contract_extras("relax_build", ns, {}) == []
+    assert agent03_check._contract_extras("relax_build", ns, {}) == []
     assert calls == [1]  # no stored forces, so one forward call
     ns["start_max_force"] = torch.tensor([5.04, 2.0])  # inside 1 percent
-    assert agent03._contract_extras("relax_build", ns, {}) == []
+    assert agent03_check._contract_extras("relax_build", ns, {}) == []
     ns["start_max_force"] = torch.tensor([4.0, 2.0])  # the largest Cartesian component
-    assert agent03._contract_extras("relax_build", ns, {}) == [
+    assert agent03_check._contract_extras("relax_build", ns, {}) == [
         "relax_build: start_max_force should be the largest force on any atom, measured as the "
         "length of the force vector, in eV/Å; found values that differ for 1 of 2 crystals "
         "(for example 4 instead of 5)"
@@ -643,7 +643,7 @@ def test_largest_force_is_the_vector_length(torch_nvalchemi, monkeypatch):
 def test_largest_force_uses_stored_forces_and_falls_back(torch_nvalchemi, monkeypatch):
     torch = torch_nvalchemi
     forces = _force_case(torch)
-    monkeypatch.setattr(agent03, "prepare_model_batch", lambda batch, model: batch)
+    monkeypatch.setattr(agent03_check, "prepare_model_batch", lambda batch, model: batch)
     calls = []
 
     def model(batch):
@@ -653,14 +653,14 @@ def test_largest_force_uses_stored_forces_and_falls_back(torch_nvalchemi, monkey
     batch = _batch((2, 3))
     batch.forces = forces
     ns = {"relaxed_batch": batch, "mace_model": model, "relaxed_max_force": torch.tensor([5.0, 2.0])}
-    assert agent03._contract_extras("relax_run", ns, {}) == []
+    assert agent03_check._contract_extras("relax_run", ns, {}) == []
     assert calls == []  # the stored forces agree, no forward call
     # Stored forces one step old: the fresh forces decide.
     batch.forces = forces * 0.5
-    assert agent03._contract_extras("relax_run", ns, {}) == []
+    assert agent03_check._contract_extras("relax_run", ns, {}) == []
     assert calls == [1]
     ns["relaxed_max_force"] = torch.tensor([4.0, 1.0])
-    problems = agent03._contract_extras("relax_run", ns, {})
+    problems = agent03_check._contract_extras("relax_run", ns, {})
     assert problems == [
         "relax_run: relaxed_max_force should be the largest force on any atom, measured as the "
         "length of the force vector, in eV/Å; found values that differ for 2 of 2 crystals "
@@ -670,15 +670,15 @@ def test_largest_force_uses_stored_forces_and_falls_back(torch_nvalchemi, monkey
 
 def test_largest_force_check_never_fails_a_file_it_cannot_judge(torch_nvalchemi, monkeypatch):
     torch = torch_nvalchemi
-    monkeypatch.setattr(agent03, "prepare_model_batch", lambda batch, model: batch)
+    monkeypatch.setattr(agent03_check, "prepare_model_batch", lambda batch, model: batch)
 
     def broken(batch):
         raise RuntimeError("no forces")
 
     ns = {"relaxed_batch": _batch((2, 3)), "mace_model": broken, "relaxed_max_force": torch.tensor([9.0, 9.0])}
-    assert agent03._force_is_vector_length("relax_run", "relaxed_max_force", "relaxed_batch", ns) == []
+    assert agent03_check._force_is_vector_length("relax_run", "relaxed_max_force", "relaxed_batch", ns) == []
     ns["relaxed_max_force"] = torch.tensor([9.0])  # wrong shape is reported by another check
-    assert agent03._force_is_vector_length("relax_run", "relaxed_max_force", "relaxed_batch", ns) == []
+    assert agent03_check._force_is_vector_length("relax_run", "relaxed_max_force", "relaxed_batch", ns) == []
 
 
 def test_atoms_moved_message(torch_nvalchemi):
@@ -693,12 +693,12 @@ def test_atoms_moved_message(torch_nvalchemi):
         "batch_ids": {},
     }
     ns = {"md_batch": md_batch}
-    assert agent03._atoms_moved("md_run", ns, ctx) == [
+    assert agent03_check._atoms_moved("md_run", ns, ctx) == [
         "md_run: no atom moved in 2 of 2 crystals during the MD; "
         "md_batch may still carry the relaxation's finished marks"
     ]
     md_batch.positions = md_batch.positions + 0.1
-    assert agent03._atoms_moved("md_run", ns, ctx) == []
+    assert agent03_check._atoms_moved("md_run", ns, ctx) == []
 
 
 def _watch(times, dt=1.0):
@@ -710,30 +710,30 @@ def test_time_axis_message(torch_nvalchemi):
     ce = torch.zeros(4, 2)
     on_time = {"time_fs": torch.tensor([0.0, 1.0, 2.0, 3.0]), "crystal_energy": ce}
     ctx = {"dyn_watch": _watch([1.0, 2.0, 3.0])}  # one extra first row for time 0
-    assert agent03._time_axis("md_run", on_time, ctx) == []
+    assert agent03_check._time_axis("md_run", on_time, ctx) == []
     late = {"time_fs": torch.tensor([0.0, 1.0, 2.0, 5.0]), "crystal_energy": ce}
-    assert agent03._time_axis("md_run", late, ctx) == [
+    assert agent03_check._time_axis("md_run", late, ctx) == [
         "md_run: time_fs should give the time of each saved energy row; the last row was "
         "recorded at 3 fs but time_fs says 5 fs"
     ]
     one_step_early = {"time_fs": torch.tensor([0.0, 1.0, 2.0, 2.0 + 1.0]), "crystal_energy": ce}
-    assert agent03._time_axis("md_run", one_step_early, ctx) == []
+    assert agent03_check._time_axis("md_run", one_step_early, ctx) == []
     # no hook matches the rows: the check stays silent
-    assert agent03._time_axis("md_run", late, {"dyn_watch": _watch([1.0, 2.0])}) == []
+    assert agent03_check._time_axis("md_run", late, {"dyn_watch": _watch([1.0, 2.0])}) == []
 
 
 def test_settings_words():
     torch = pytest.importorskip("torch")
-    assert agent03._settings_words((False, False, torch.float32)) == (
+    assert agent03_check._settings_words((False, False, torch.float32)) == (
         "cuEquivariance off, not compiled, float32"
     )
-    assert agent03._settings_words((True, True, torch.float64)) == (
+    assert agent03_check._settings_words((True, True, torch.float64)) == (
         "cuEquivariance on, compiled, float64"
     )
 
 
 def test_main_prints_usage_for_an_unknown_step(capsys):
-    assert agent03.main(["x", "check", "nope"]) == 2
+    assert agent03_check.main(["x", "check", "nope"]) == 2
     assert "usage: python -m helpers.agent03 check <relax_build|relax_run|md_build|md_run|timestep_scan|temperature_ladder|speed_settings>" in (
         capsys.readouterr().err
     )
@@ -741,35 +741,35 @@ def test_main_prints_usage_for_an_unknown_step(capsys):
 
 def test_missing_files_messages(tmp_path, monkeypatch, capsys, torch_nvalchemi):
     monkeypatch.setattr(agent03, "WORK_DIR", tmp_path)
-    problems, _ = agent03.check_step("relax_build")
+    problems, _ = agent03_check.check_step("relax_build")
     assert problems == [f"relax_build: the step file relax_build.py is missing in {tmp_path}"]
-    problems, _ = agent03.check_step("relax_run")
+    problems, _ = agent03_check.check_step("relax_run")
     assert problems == [f"relax_run: the earlier step file relax_build.py is missing in {tmp_path}"]
 
 
 def test_a_failing_step_file_is_reported_in_one_line(tmp_path, monkeypatch, capsys, torch_nvalchemi):
     monkeypatch.setattr(agent03, "WORK_DIR", tmp_path)
     (tmp_path / "relax_build.py").write_text("raise ValueError('no crystals here\\nsecond line')\n")
-    problems, _ = agent03.check_step("relax_build")
+    problems, _ = agent03_check.check_step("relax_build")
     assert problems[0] == "relax_build: relax_build.py stopped with ValueError: no crystals here"
 
 
 def test_a_file_that_uses_dunder_file_is_told_to_remove_that_line(tmp_path, monkeypatch, capsys, torch_nvalchemi):
     monkeypatch.setattr(agent03, "WORK_DIR", tmp_path)
     (tmp_path / "relax_build.py").write_text("from pathlib import Path\nhere = Path(__file__).parent\n")
-    problems, _ = agent03.check_step("relax_build")
+    problems, _ = agent03_check.check_step("relax_build")
     assert problems[0] == (
         "relax_build: relax_build.py uses __file__, which does not exist in a notebook cell; remove that line"
     )
     # another missing name keeps the general line
     (tmp_path / "relax_build.py").write_text("print(not_defined_anywhere)\n")
-    problems, _ = agent03.check_step("relax_build")
+    problems, _ = agent03_check.check_step("relax_build")
     assert problems[0] == (
         "relax_build: relax_build.py stopped with NameError: name 'not_defined_anywhere' is not defined"
     )
     # in an earlier file the line names the earlier step
     (tmp_path / "relax_build.py").write_text("here = __file__\n")
-    problems, _ = agent03.check_step("relax_run")
+    problems, _ = agent03_check.check_step("relax_run")
     assert problems == [
         "relax_run: could not run the earlier steps; relax_build: relax_build.py uses __file__, "
         "which does not exist in a notebook cell; remove that line"
@@ -782,7 +782,7 @@ def test_a_file_that_uses_dunder_file_is_told_to_remove_that_line(tmp_path, monk
 
 
 def test_timestep_scan_contract():
-    spec = agent03.STEPS["timestep_scan"]
+    spec = agent03_check.STEPS["timestep_scan"]
     assert spec.file == "timestep_scan.py"
     assert spec.after == ["relax_build"]
     assert list(spec.names) == ["replica_dt", "saved_step", "total_energy"]
@@ -847,8 +847,8 @@ def test_timestep_scan_name_checks(torch_nvalchemi):
     torch = torch_nvalchemi
 
     def check(name, value, **syms):
-        spec = agent03.STEPS["timestep_scan"].names[name]
-        return agent03._check_name("timestep_scan", name, spec, {name: value}, syms)
+        spec = agent03_check.STEPS["timestep_scan"].names[name]
+        return agent03_check._check_name("timestep_scan", name, spec, {name: value}, syms)
 
     syms = {"n_replicas": 3, "n_saved": 4}
     assert check("replica_dt", torch.tensor([0.5, 1.0, 2.0]), **syms) == []
@@ -883,8 +883,8 @@ def test_timestep_scan_symbols_come_from_its_own_names(torch_nvalchemi):
         "saved_step": torch.zeros(101),
         "replica_dt": torch.ones(6),
     }
-    assert agent03._symbols(ns, "timestep_scan") == {"n_structures": 200, "n_saved": 101, "n_replicas": 6}
-    assert agent03._symbols(ns, "md_run")["n_saved"] == 501
+    assert agent03_check._symbols(ns, "timestep_scan") == {"n_structures": 200, "n_saved": 101, "n_replicas": 6}
+    assert agent03_check._symbols(ns, "md_run")["n_saved"] == 501
 
 
 def test_timestep_scan_value_messages(torch_nvalchemi):
@@ -892,7 +892,7 @@ def test_timestep_scan_value_messages(torch_nvalchemi):
 
     def values(dt, energy, saved=(0, 10, 20, 30)):
         ns = {"replica_dt": torch.tensor(dt), "saved_step": torch.tensor(saved), "total_energy": energy}
-        return agent03._scan_values("timestep_scan", ns, {})
+        return agent03_check._scan_values("timestep_scan", ns, {})
 
     ok = torch.zeros(4, 3)
     assert values([0.5, 1.0, 2.0], ok) == []
@@ -941,18 +941,17 @@ def _engine(dt_fs):
 
 
 def _scan_ctx(torch, batch, dt_fs):
-    runs = [(_engine(dt_fs), agent03._start_state(batch))]
+    runs = [(_engine(dt_fs), agent03_check._start_state(batch))]
     return {"run_watch": SimpleNamespace(runs=runs)}
 
 
 def _copies(torch, batch, dt=(0.5, 1.0, 2.0), engine_dt=None):
     ns = {"replica_dt": torch.tensor(dt)}
     ctx = _scan_ctx(torch, batch, list(engine_dt or dt))
-    return agent03._scan_copies("timestep_scan", ns, ctx)
+    return agent03_check._scan_copies("timestep_scan", ns, ctx)
 
 
 def test_copies_of_a_crystal_from_the_set_pass(torch_nvalchemi):
-    from ase.build import bulk
 
     batch = _batch((3, 3, 3))  # graphs of H atoms with a cell and pbc
     assert _copies(torch_nvalchemi, batch) == []
@@ -1033,7 +1032,7 @@ def test_copies_must_run_in_one_batch(torch_nvalchemi):
     torch = torch_nvalchemi
     ns = {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}
     ctx = _scan_ctx(torch, _batch((3,)), [0.5])
-    assert agent03._scan_copies("timestep_scan", ns, ctx) == [
+    assert agent03_check._scan_copies("timestep_scan", ns, ctx) == [
         "timestep_scan: the copies should run together in one batch, one graph for each entry of "
         "replica_dt (3); found runs of 1 graphs"
     ]
@@ -1042,8 +1041,8 @@ def test_copies_must_run_in_one_batch(torch_nvalchemi):
 def test_copies_check_is_silent_when_no_run_was_seen(torch_nvalchemi):
     torch = torch_nvalchemi
     ns = {"replica_dt": torch.tensor([0.5, 1.0])}
-    assert agent03._scan_copies("timestep_scan", ns, {}) == []
-    assert agent03._scan_copies("timestep_scan", ns, {"run_watch": SimpleNamespace(runs=[])}) == []
+    assert agent03_check._scan_copies("timestep_scan", ns, {}) == []
+    assert agent03_check._scan_copies("timestep_scan", ns, {"run_watch": SimpleNamespace(runs=[])}) == []
 
 
 def test_copies_with_an_empty_cell_and_open_boundaries_are_counted(torch_nvalchemi):
@@ -1055,7 +1054,7 @@ def test_copies_with_an_empty_cell_and_open_boundaries_are_counted(torch_nvalche
     state = ctx["run_watch"].runs[0][1]
     state["pbc"] = torch.zeros(3, 3, dtype=torch.bool)
     state["cell"] = torch.zeros(3, 3, 3, dtype=torch.float64)
-    problems = agent03._scan_copies("timestep_scan", {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}, ctx)
+    problems = agent03_check._scan_copies("timestep_scan", {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}, ctx)
     assert problems == [
         "timestep_scan: the copies should be a periodic crystal (a cell and periodic boundaries on all "
         "three axes); found 3 of 3 copies without periodic boundaries on all three axes and 3 with an "
@@ -1070,7 +1069,7 @@ def test_copies_marked_finished_are_reported(torch_nvalchemi):
     batch = _ase_copies(bulk("Cu", cubic=True))
     ctx = _scan_ctx(torch, batch, [0.5, 1.0, 2.0])
     ctx["run_watch"].runs[0][1]["finished"] = 3
-    problems = agent03._scan_copies("timestep_scan", {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}, ctx)
+    problems = agent03_check._scan_copies("timestep_scan", {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}, ctx)
     assert problems == [
         "timestep_scan: no copy should be marked finished before the run starts; found 3 of 3 marked "
         "finished (status 1 or more, left over from the relaxation)"
@@ -1097,7 +1096,7 @@ def test_check_fails_when_every_copy_blows_up_even_if_finite(torch_nvalchemi):
     def values(energy, ctx=None):
         ns = {"replica_dt": torch.tensor([0.5, 1.0, 2.0]), "saved_step": torch.tensor([0, 10, 20, 30]),
               "total_energy": energy}
-        return agent03._scan_values("timestep_scan", ns, ctx or {})
+        return agent03_check._scan_values("timestep_scan", ns, ctx or {})
 
     huge = torch.zeros(4, 3)
     huge[2:, :] = 1e8  # finite everywhere
@@ -1109,7 +1108,7 @@ def test_check_fails_when_every_copy_blows_up_even_if_finite(torch_nvalchemi):
     one_ok[:, 0] = 0.01
     assert values(one_ok) == []
     # with the run known, the limit is 1 eV per atom: 3 copies of 8 atoms
-    ctx = {"run_watch": SimpleNamespace(runs=[(None, agent03._start_state(_batch((8, 8, 8))))])}
+    ctx = {"run_watch": SimpleNamespace(runs=[(None, agent03_check._start_state(_batch((8, 8, 8))))])}
     mid = torch.zeros(4, 3)
     mid[2:, :] = 6.0  # under 10 eV for the copy, under 8 eV (1 eV x 8 atoms): passes
     assert values(mid, ctx) == []
@@ -1133,35 +1132,34 @@ def test_copies_that_did_not_move_are_reported(torch_nvalchemi):
 
     batch = _ase_copies(bulk("Cu", cubic=True))  # 3 copies of 4 atoms
     ns = {"replica_dt": torch.tensor([0.5, 1.0, 2.0])}
-    pos = agent03._start_state(batch)["pos"]
+    pos = agent03_check._start_state(batch)["pos"]
     ctx = _moved_state(torch, batch, torch.zeros_like(pos))
-    assert agent03._scan_copies("timestep_scan", ns, ctx) == [
+    assert agent03_check._scan_copies("timestep_scan", ns, ctx) == [
         "timestep_scan: the atoms of 3 of 3 copies did not move during the run, so their energy cannot drift"
     ]
     # one copy moves, two stay
     shift = torch.zeros_like(pos)
     shift[:4] = 0.01
-    assert agent03._scan_copies("timestep_scan", ns, _moved_state(torch, batch, shift)) == [
+    assert agent03_check._scan_copies("timestep_scan", ns, _moved_state(torch, batch, shift)) == [
         "timestep_scan: the atoms of 2 of 3 copies did not move during the run, so their energy cannot drift"
     ]
     # one atom of each copy moving is enough
     shift = torch.zeros_like(pos)
     shift[0::4] = 0.01
-    assert agent03._scan_copies("timestep_scan", ns, _moved_state(torch, batch, shift)) == []
+    assert agent03_check._scan_copies("timestep_scan", ns, _moved_state(torch, batch, shift)) == []
     # finished marks add the hint
     ctx = _moved_state(torch, batch, torch.zeros_like(pos))
     ctx["run_watch"].runs[0][1]["finished"] = 3
-    lines = agent03._scan_copies("timestep_scan", ns, ctx)
+    lines = agent03_check._scan_copies("timestep_scan", ns, ctx)
     assert lines[-1] == (
         "timestep_scan: the atoms of 3 of 3 copies did not move during the run, so their energy cannot "
         "drift; the copies may still carry the relaxation's finished marks"
     )
     # no end positions recorded: silent
-    assert agent03._scan_copies("timestep_scan", ns, _scan_ctx(torch, batch, [0.5, 1.0, 2.0])) == []
+    assert agent03_check._scan_copies("timestep_scan", ns, _scan_ctx(torch, batch, [0.5, 1.0, 2.0])) == []
 
 
 def test_run_watch_records_end_positions(torch_nvalchemi):
-    torch = torch_nvalchemi
     from nvalchemi.dynamics.base import BaseDynamics
 
     batch = _batch((3, 3))
@@ -1173,7 +1171,7 @@ def test_run_watch_records_end_positions(torch_nvalchemi):
 
     BaseDynamics.run = fake_run
     try:
-        with agent03._WatchEngineRuns() as watch:
+        with agent03_check._WatchEngineRuns() as watch:
             BaseDynamics.run(SimpleNamespace(), batch)
     finally:
         BaseDynamics.run = original
@@ -1221,7 +1219,7 @@ def test_ladder_default_crystal_is_the_saved_copper_supercell():
 
 
 def test_ladder_contract():
-    spec = agent03.STEPS["temperature_ladder"]
+    spec = agent03_check.STEPS["temperature_ladder"]
     assert spec.file == "temperature_ladder.py" and spec.after == ["relax_build"]
     assert list(spec.names) == ["time_fs", "replica_temperature", "replica_energy"]
     time, temps, energy = (spec.names[n] for n in spec.names)
@@ -1232,11 +1230,11 @@ def test_ladder_contract():
 
 
 def test_setup_cell_names_the_ladder_setting_and_reads_the_overrides(monkeypatch):
-    assert f"n_temperatures = {agent03.SETTINGS['n_temperatures']}" in agent03.SETUP_CELL.splitlines()
-    assert "n_crystals = 200" in agent03.SETUP_CELL.splitlines()
+    assert f"n_temperatures = {agent03_check.SETTINGS['n_temperatures']}" in agent03_check.SETUP_CELL.splitlines()
+    assert "n_crystals = 200" in agent03_check.SETUP_CELL.splitlines()
     monkeypatch.setenv("ALCHEMI_AGENT03_N_CRYSTALS", "4")
     monkeypatch.setenv("ALCHEMI_AGENT03_N_TEMPERATURES", "3")
-    lines = agent03.setup_cell().splitlines()
+    lines = agent03_check.setup_cell().splitlines()
     assert "n_crystals = 4" in lines and "n_temperatures = 3" in lines
 
 
@@ -1361,7 +1359,7 @@ def _ladder_ns_ctx(torch, temps=(300.0, 1000.0, 3000.0), atoms=None, engine_k=No
 
     k = len(temps)
     batch = _ase_copies(atoms if atoms is not None else bulk("Cu", cubic=True), n=k)
-    state = agent03._start_state(batch)
+    state = agent03_check._start_state(batch)
     state["end_pos"] = state["pos"] + shift
     state["optimizer"] = False
     state["exchange"] = False
@@ -1375,24 +1373,24 @@ def _ladder_ns_ctx(torch, temps=(300.0, 1000.0, 3000.0), atoms=None, engine_k=No
 
 def test_ladder_passes_for_copies_of_one_crystal_at_their_own_temperatures(torch_nvalchemi):
     ns, ctx, _ = _ladder_ns_ctx(torch_nvalchemi)
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == []
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == []
     assert ctx["notes"] == []
 
 
 def test_ladder_fails_when_no_atom_moved(torch_nvalchemi):
     torch = torch_nvalchemi
     ns, ctx, _ = _ladder_ns_ctx(torch, shift=0.0)
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: the atoms of 3 of 3 copies did not move during the run"
     ]
     ns, ctx, _ = _ladder_ns_ctx(torch, shift=0.0, extra={"finished": 3})
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: the atoms of 3 of 3 copies did not move during the run; the copies may "
         "still carry the relaxation's finished marks"
     ]
     ns["replica_energy"] = torch.full((13, 3), -4.09)  # flat lines: no "unexpected" note beside the failure
     ctx["notes"].clear()
-    assert len(agent03._ladder_contract("temperature_ladder", ns, ctx)) == 1 and ctx["notes"] == []
+    assert len(agent03_check._ladder_contract("temperature_ladder", ns, ctx)) == 1 and ctx["notes"] == []
 
 
 def test_ladder_motion_is_judged_on_the_dynamics_not_on_a_relaxation_before_it(torch_nvalchemi):
@@ -1401,7 +1399,7 @@ def test_ladder_motion_is_judged_on_the_dynamics_not_on_a_relaxation_before_it(t
     relax = dict(md, optimizer=True, finished=0)
     relax["end_pos"] = relax["pos"] + 0.2  # the relaxation moved the atoms, the thermostat run did not
     ctx["run_watch"].runs.insert(0, (SimpleNamespace(), relax))
-    problems = agent03._ladder_contract("temperature_ladder", ns, ctx)
+    problems = agent03_check._ladder_contract("temperature_ladder", ns, ctx)
     assert problems == [
         "temperature_ladder: the atoms of 3 of 3 copies did not move during the run; the copies may "
         "still carry the relaxation's finished marks"
@@ -1412,27 +1410,27 @@ def test_ladder_fails_on_a_flat_energy_even_when_no_run_was_seen(torch_nvalchemi
     torch = torch_nvalchemi
     ns, _, _ = _ladder_ns_ctx(torch)
     ns["replica_energy"] = torch.full((13, 3), -4.09)
-    assert agent03._ladder_contract("temperature_ladder", ns, {"notes": []}) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, {"notes": []}) == [
         "temperature_ladder: replica_energy of 3 of 3 copies does not change along the run, so their "
         "atoms did not move"
     ]
     # with the watch, the line about the atoms is printed once, not twice
     ns2, ctx, _ = _ladder_ns_ctx(torch, shift=0.0)
     ns2["replica_energy"] = torch.full((13, 3), -4.09)
-    assert len(agent03._ladder_contract("temperature_ladder", ns2, ctx)) == 1
+    assert len(agent03_check._ladder_contract("temperature_ladder", ns2, ctx)) == 1
 
 
 def test_ladder_fails_when_one_temperature_was_set_for_all_copies(torch_nvalchemi):
     torch = torch_nvalchemi
     # temperature of shape (1,) or a scalar: the engine holds 500 K for every copy
     ns, ctx, _ = _ladder_ns_ctx(torch, engine_k=[500.0])
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: replica_temperature should be the temperature each copy's thermostat "
         "held (K); the run used 500, 500, 500 but replica_temperature says 300, 1000, 3000"
     ]
     # the same value for every copy in replica_temperature as well
     ns, ctx, _ = _ladder_ns_ctx(torch, temps=(500.0, 500.0, 500.0))
-    problems = agent03._ladder_contract("temperature_ladder", ns, ctx)
+    problems = agent03_check._ladder_contract("temperature_ladder", ns, ctx)
     assert problems[0] == (
         "temperature_ladder: replica_temperature should hold a different temperature for each copy, "
         "in K; found 1 different temperature among 3"
@@ -1441,28 +1439,28 @@ def test_ladder_fails_when_one_temperature_was_set_for_all_copies(torch_nvalchem
 
 def test_ladder_fails_when_copies_are_not_one_batch_of_one_periodic_crystal(torch_nvalchemi):
     torch = torch_nvalchemi
-    from ase.build import bulk, molecule
+    from ase.build import molecule
 
     ns, ctx, state = _ladder_ns_ctx(torch)
     state["n"] = 1  # the file ran one copy at a time
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: the copies should run together in one batch, one graph for each "
         "temperature (n_temperatures = 3); found runs of 1 graphs"
     ]
     ns, ctx, _ = _ladder_ns_ctx(torch, atoms=molecule("H2O"))
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: the copies should be a periodic crystal (a cell and periodic boundaries "
         "on all three axes); found copies that carry no cell or no periodic boundaries; MACE-MPA-0 "
         "is a model for materials"
     ]
     ns, ctx, state = _ladder_ns_ctx(torch)
     state["cell"][2] *= 1.1
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: every copy should be the same crystal; found copies with different cells"
     ]
     ns, ctx, state = _ladder_ns_ctx(torch)
     state["z"][-1] = 13
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: every copy should be the same crystal; found copies with different atoms"
     ]
 
@@ -1471,7 +1469,7 @@ def test_ladder_fails_on_a_first_row_that_is_not_finite(torch_nvalchemi):
     torch = torch_nvalchemi
     ns, ctx, _ = _ladder_ns_ctx(torch)
     ns["replica_energy"][0, 1] = float("nan")
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [
         "temperature_ladder: the first row of replica_energy should be finite for every copy; found "
         "1 of 3 copies that are not"
     ]
@@ -1481,7 +1479,7 @@ def test_ladder_out_of_order_is_a_note_and_the_step_passes(torch_nvalchemi):
     torch = torch_nvalchemi
     ns, ctx, _ = _ladder_ns_ctx(torch)
     ns["replica_energy"] = ns["replica_energy"][:, [0, 2, 1]]
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == []
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == []
     assert len(ctx["notes"]) == 1 and ctx["notes"][0].startswith(
         "unexpected: over the last third of the run, the copy at 3000 K sits below the copy at 1000 K"
     )
@@ -1502,21 +1500,21 @@ def test_ladder_accepts_another_route_and_compares_kinetic_temperatures(torch_nv
         return torch.stack([speed, torch.zeros(n, dtype=torch.float64), torch.zeros(n, dtype=torch.float64)], dim=1)
 
     state |= {"masses": masses, "end_vel": velocities(temps)}
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == [] and ctx["notes"] == []
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == [] and ctx["notes"] == []
     state["end_vel"] = velocities(temps.flip(0))  # the hottest copy is the coldest in the run
     ctx["notes"].clear()
-    assert agent03._ladder_contract("temperature_ladder", ns, ctx) == []
+    assert agent03_check._ladder_contract("temperature_ladder", ns, ctx) == []
     assert ctx["notes"] and all(note.startswith("unexpected: at the end of the run the copy at ") for note in ctx["notes"])
 
 
 def test_ladder_name_checks_use_n_temperatures(torch_nvalchemi):
     torch = torch_nvalchemi
     ns = {"n_crystals": 4, "n_temperatures": 6, "time_fs": torch.arange(5.0)}
-    syms = agent03._symbols(ns, "temperature_ladder")
+    syms = agent03_check._symbols(ns, "temperature_ladder")
     assert syms == {"n_structures": 4, "n_temperatures": 6, "n_saved": 5}
-    spec = agent03.STEPS["temperature_ladder"].names["replica_temperature"]
+    spec = agent03_check.STEPS["temperature_ladder"].names["replica_temperature"]
     ns["replica_temperature"] = torch.tensor([300.0, 600.0, 900.0])
-    assert agent03._check_name("temperature_ladder", "replica_temperature", spec, ns, syms) == [
+    assert agent03_check._check_name("temperature_ladder", "replica_temperature", spec, ns, syms) == [
         "temperature_ladder: replica_temperature should have shape (n_temperatures,) = (6,) in K; "
         "found shape (3,)"
     ]
@@ -1533,9 +1531,9 @@ def test_run_watch_tells_a_relaxation_from_dynamics(torch_nvalchemi):
     from nvalchemi.dynamics import LBFGS, NVTLangevin
 
     lbfgs, nvt = object.__new__(LBFGS), object.__new__(NVTLangevin)
-    assert agent03._is_optimizer(lbfgs) and not agent03._is_optimizer(nvt)
-    assert agent03._is_optimizer(SimpleNamespace(sub_stages=[(0, lbfgs)]))
-    assert not agent03._is_optimizer(SimpleNamespace(sub_stages=[(0, lbfgs), (1, nvt)]))
+    assert agent03_check._is_optimizer(lbfgs) and not agent03_check._is_optimizer(nvt)
+    assert agent03_check._is_optimizer(SimpleNamespace(sub_stages=[(0, lbfgs)]))
+    assert not agent03_check._is_optimizer(SimpleNamespace(sub_stages=[(0, lbfgs), (1, nvt)]))
 
 
 # ---------------------------------------------------------------------------
@@ -1545,7 +1543,7 @@ def test_run_watch_tells_a_relaxation_from_dynamics(torch_nvalchemi):
 
 def _speed(table, roles=ROLES, watch=None):
     ctx = {"notes": [], "watch": watch}
-    problems = agent03._speed_contract("speed_settings", {"speed_table": table, "setting_roles": roles}, ctx)
+    problems = agent03_check._speed_contract("speed_settings", {"speed_table": table, "setting_roles": roles}, ctx)
     return problems, ctx["notes"]
 
 
@@ -1654,10 +1652,10 @@ def test_one_by_one_timing_notes_crystals_that_are_not_of_average_size(torch_nva
     crystal_batch = _batch((8, 16, 24, 32, 120))  # mean 40 atoms
 
     def notes(sizes):
-        runs = [(None, agent03._start_state(crystal_batch))]  # the batched run
-        runs += [(None, agent03._start_state(_batch((n,)))) for n in sizes]
+        runs = [(None, agent03_check._start_state(crystal_batch))]  # the batched run
+        runs += [(None, agent03_check._start_state(_batch((n,)))) for n in sizes]
         ns = {"crystal_batch": crystal_batch, "single_seconds": torch.tensor([1.0, 2.0, 3.0])}
-        return agent03._single_sizes_notes(ns, SimpleNamespace(runs=runs))
+        return agent03_check._single_sizes_notes(ns, SimpleNamespace(runs=runs))
 
     assert notes([120, 8, 40, 40, 40]) == []  # warm-up runs first; the last three are the timed ones
     assert notes([32, 40, 48]) == []
@@ -1667,7 +1665,7 @@ def test_one_by_one_timing_notes_crystals_that_are_not_of_average_size(torch_nva
     ]
     assert notes([8, 8, 16])[0].startswith("unexpected: the crystals timed one by one hold 8, 8, 16 atoms")
     assert notes([40, 40]) == []  # fewer one-crystal runs than timings: silent
-    assert agent03.STEPS["relax_run"].watch_runs
+    assert agent03_check.STEPS["relax_run"].watch_runs
 
 
 def test_rows_that_repeat_after_the_first_fail_the_ladder_and_the_md_run():
@@ -1676,14 +1674,14 @@ def test_rows_that_repeat_after_the_first_fail_the_ladder_and_the_md_run():
     time, temps, energy = _ladder_inputs(n_saved=4, temps=(100.0, 3000.0))
     stuck = energy.copy()
     stuck[1:] = energy[-1]
-    assert agent03._rows_repeat("temperature_ladder", "replica_energy", {"replica_energy": stuck}) == [
+    assert agent03_check._rows_repeat("temperature_ladder", "replica_energy", {"replica_energy": stuck}) == [
         "temperature_ladder: the 3 saved rows of replica_energy after the first hold exactly the same "
         "numbers, so they were not recorded along the run; keep a copy of the energies each time a row is saved"
     ]
-    assert agent03._rows_repeat("temperature_ladder", "replica_energy", {"replica_energy": energy}) == []
-    assert agent03._rows_repeat("md_run", "crystal_energy", {"crystal_energy": stuck}) != []
+    assert agent03_check._rows_repeat("temperature_ladder", "replica_energy", {"replica_energy": energy}) == []
+    assert agent03_check._rows_repeat("md_run", "crystal_energy", {"crystal_energy": stuck}) != []
     flat = np.full((4, 2), -5.4)  # nothing moved: the flat-line check reports it, not this one
-    assert agent03._rows_repeat("md_run", "crystal_energy", {"crystal_energy": flat}) == []
+    assert agent03_check._rows_repeat("md_run", "crystal_energy", {"crystal_energy": flat}) == []
 
 
 def test_ladder_view_prints_no_order_note_for_equal_lines():
@@ -1696,13 +1694,13 @@ def test_ladder_time_axis_is_a_note(torch_nvalchemi):
     energy = np.zeros((4, 2))
     ctx = {"dyn_watch": _watch([2.0, 42.0, 82.0], dt=2.0)}  # rows after 1, 21, 41 steps of 2 fs, plus time 0
     on_time = {"time_fs": np.array([0.0, 2.0, 42.0, 82.0]), "replica_energy": energy}
-    assert agent03._ladder_time_axis_notes(on_time, ctx) == []
+    assert agent03_check._ladder_time_axis_notes(on_time, ctx) == []
     off = {"time_fs": np.array([0.0, 40.0, 80.0, 120.0]), "replica_energy": energy}
-    assert agent03._ladder_time_axis_notes(off, ctx) == [
+    assert agent03_check._ladder_time_axis_notes(off, ctx) == [
         "unexpected: time_fs should give the time of each saved energy row; the last row was "
         "recorded at 82 fs but time_fs says 120 fs"
     ]
-    assert agent03._ladder_time_axis_notes(off, {}) == []  # no watch: silent
+    assert agent03_check._ladder_time_axis_notes(off, {}) == []  # no watch: silent
 
 
 def test_configure_tutorial_drops_only_the_mace_default_model_line(monkeypatch, capsys):
@@ -1757,12 +1755,50 @@ def test_configure_tutorial_ignores_the_speed_step_notices_by_message_and_module
 def test_torch_jit_notice_is_matched_by_message_and_place():
     import warnings
 
+    from helpers.model_support import is_torch_jit_notice
+
     def record(message, category, filename):
         return warnings.WarningMessage(message, category, filename, 1)
 
     notice = "`torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`."
     jit_file = "/venv/lib/python3.12/site-packages/torch/jit/_script.py"
-    assert agent03._is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, jit_file))
-    assert not agent03._is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, "/my/code.py"))
-    assert not agent03._is_torch_jit_notice(record(DeprecationWarning("other"), DeprecationWarning, jit_file))
-    assert not agent03._is_torch_jit_notice(record(UserWarning(notice), UserWarning, jit_file))
+    assert is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, jit_file))
+    assert not is_torch_jit_notice(record(DeprecationWarning(notice), DeprecationWarning, "/my/code.py"))
+    assert not is_torch_jit_notice(record(DeprecationWarning("other"), DeprecationWarning, jit_file))
+    assert not is_torch_jit_notice(record(UserWarning(notice), UserWarning, jit_file))
+
+
+def test_configure_tutorial_imports_mace_inside_the_course_guard():
+    """The first import of mace raises torch's jit notice behind a "once" rule; the course guard
+    (helpers.model_support.suppress_known_mace_load_noise) drops it and shows every other warning.
+
+    A fresh interpreter, because the notices are raised only by the first import. The guard is
+    replaced by one that raises the two warnings itself, so the test does not depend on what the
+    installed mace raises.
+    """
+
+    import subprocess
+
+    pytest.importorskip("mace.calculators.foundations_models")
+    code = (
+        "import contextlib, warnings\n"
+        "from helpers import agent03, model_support\n"
+        "guard = model_support.suppress_known_mace_load_noise\n"
+        "@contextlib.contextmanager\n"
+        "def noisy():\n"
+        "    with guard():\n"
+        "        warnings.simplefilter('once')\n"
+        "        warnings.warn_explicit('`torch.jit.script` is deprecated. Please switch.', DeprecationWarning,\n"
+        "                               '/venv/site-packages/torch/jit/_script.py', 1488)\n"
+        "        warnings.warn_explicit('another notice', UserWarning, 'x.py', 1)\n"
+        "        yield\n"
+        "model_support.suppress_known_mace_load_noise = noisy\n"
+        "agent03._quiet_mace_default_line()\n"
+        "from mace.calculators import foundations_models\n"
+        "print('wrapped', getattr(foundations_models.download_mace_mp_checkpoint, '_alchemi_quiet', False))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], cwd=_NOTEBOOK_DIR, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    assert "wrapped True" in result.stdout
+    assert "torch.jit.script" not in result.stderr
+    assert "another notice" in result.stderr

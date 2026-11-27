@@ -1,8 +1,7 @@
 # Agent 03, "Ready-made": sample step files
 
-One file per `%load` step of `notebooks/alchemi-agent-03-ready-made.ipynb`
-(plan 3.1, 31 cells). Each is a file an agent might write from a learner's
-prompt (Toolkit 0.3.0).
+One file per `%load` step of `notebooks/alchemi-agent-03-ready-made.ipynb`.
+Each is a file an agent might write from a learner's prompt (Toolkit 0.3.0).
 
 | Step | File | Names it leaves |
 | --- | --- | --- |
@@ -38,16 +37,16 @@ files (used for short runs on a CPU):
 
 Notes on the samples:
 
-- `relax_build.py`, `relax_run.py`, `md_build.py` and `md_run.py` are the
-  sample files of the build of 25 Nov 2026 (run on a GPU), unchanged.
+- `relax_build.py`, `relax_run.py`, `md_build.py` and `md_run.py` ran on a
+  GPU on 25 Nov 2026 and are unchanged since.
   `relax_run.py` calls `torch.cuda.synchronize()` and needs a GPU.
 - `temperature_ladder.py` uses the saved default crystal,
   `helpers.load_ladder_crystal()` (copper, 64 atoms, `notebooks/data/agent03/`),
   one temperature for each copy from 100 K to 5,000 K spaced by a constant
   ratio, a 1 fs timestep and 300 steps. Each copy starts with velocities at
   its own temperature. It returns the energy per atom; the first row is the
-  crystal before the first step. Its step count is provisional until the
-  two-minute measurement on the course GPU.
+  crystal before the first step. On the NVIDIA L40S the cell takes 36.7 s
+  with 12 temperatures (27 Nov 2026).
 - `speed_settings.py` times 10 L-BFGS steps on 50 crystals picked evenly from
   `crystal_batch` (2,184 atoms of 8,722): a first run on a freshly loaded
   model and the median of three repeats, for each of the four cases, all on

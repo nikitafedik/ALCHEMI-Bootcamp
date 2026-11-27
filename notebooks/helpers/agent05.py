@@ -8,12 +8,15 @@ the composed model's energies on them) and ``load_molecules()`` (five small mole
 30-atom range of AceFF 2.0). Views: ``check_wrapped_model``, ``plot_interaction_curves``,
 ``show_relaxed_forces``. Step check: ``python -m helpers.agent05 check <step>``.
 
-Every line a view or a check prints to the learner is a draft and lives in ``_WORDS``.
+The words of the views and the fixed lines of the check are in ``_WORDS``; the lines that
+name what a step file left are written where they are found, in the ``_*_problems`` functions.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import traceback
 import warnings
 from collections import Counter
 from pathlib import Path
@@ -47,13 +50,13 @@ _KCAL_PER_EV = 23.060548  # 1 eV in kcal/mol
 _STYLE = Path(__file__).resolve().parents[2] / "shared" / "alchemi-figure.mplstyle"
 _GREEN, _GREY, _LIGHT_GREY = "#76B900", "#6F6F6F", "#B8B8B8"
 
-# The word of "Done when" in the relax piece, the board's text: "below the threshold" means strictly
-# below (revision of 26 Nov): a value equal to the threshold, or above it by any amount, is not
-# below. The column head of the forces view and the line of the check use this word.
+# The word of "Done when" in the relax step. "Below the threshold" means strictly below: a value
+# equal to the threshold, or above it by any amount, is not below. The column head of the forces
+# view and the line of the check use this word.
 _THRESHOLD_WORD = "below"
 _TRAINED_ATOMS = 30  # largest molecules in AceFF 2.0's training data (model card)
 
-# All learner-visible lines of the views and the checks, in one place (drafts for the educator).
+# The words of the views and the fixed lines of the check, in one place.
 _WORDS = {
     "session": (
         "Give these to your agent when you start the session:\n"
@@ -99,8 +102,8 @@ class _HubTokenNotice(logging.Filter):
     """Drop the Hub's "You are sending unauthenticated requests to the HF Hub" line, a WARNING record.
 
     The Hub sends it with the first download of a session that has no HF_TOKEN; ``huggingface_hub``
-    logs it on the logger ``huggingface_hub.utils._http`` (L40S run, 27 Nov, the AceFF download).
-    The course download is public and needs no token.
+    logs it on the logger ``huggingface_hub.utils._http``. The AceFF download is public and needs
+    no token.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -114,7 +117,7 @@ def configure_tutorial() -> None:
     """Apply the course style (light only) and quiet two library notices of the AceFF load.
 
     TorchMD-Net warns "Old-format checkpoint detected" when it loads the AceFF checkpoint and remaps it
-    itself; the filter is narrow, by message and module (fix pass 27 Nov, R4). The course setup imports
+    itself; the filter is narrow, by message and module. The course setup imports
     Toolkit's models first, so this filter sits in front of the "once" rule they add.
     The Hub's token notice is dropped by message on its one logger (see ``_HubTokenNotice``).
     """
@@ -154,7 +157,7 @@ def load_molecules() -> list[Atoms]:
 
     from ase.io import read
 
-    return [atoms for atoms in read(_MOLECULES, index=":")]
+    return list(read(_MOLECULES, index=":"))
 
 
 def load_pair_scans():
@@ -200,6 +203,13 @@ def load_pair_scans():
 # --------------------------------------------------------------------------
 # Views
 # --------------------------------------------------------------------------
+def _shape(value):
+    """The shape of a tensor or array as a tuple; None for a value without a shape."""
+
+    shape = getattr(value, "shape", None)
+    return tuple(shape) if shape is not None else None
+
+
 def _show_table(rows, heads) -> None:
     import pandas as pd
     from IPython.display import display
@@ -212,12 +222,11 @@ def check_wrapped_model(aceff_model) -> None:
 
     scan_batch, _, _ = load_pair_scans()
     out = aceff_model(scan_batch.clone())
-    shape = lambda value: str(tuple(value.shape))  # noqa: E731
     rows = [
         (_WORDS["table_outputs"], ", ".join(sorted(aceff_model.model_config.active_outputs)), ""),
         (_WORDS["table_device"], str(next(aceff_model.parameters()).device), ""),
-        (_WORDS["table_energy"], shape(out["energy"]), "eV"),
-        (_WORDS["table_forces"], shape(out["forces"]), "eV/Å"),
+        (_WORDS["table_energy"], str(_shape(out["energy"])), "eV"),
+        (_WORDS["table_forces"], str(_shape(out["forces"])), "eV/Å"),
     ]
     _show_table(rows, _WORDS["table_heads"])
 
@@ -279,6 +288,19 @@ def show_relaxed_forces(relaxed_batch, relaxed_max_force, force_threshold) -> No
     _show_table(rows, _WORDS["forces_heads"])
 
 
+@contextlib.contextmanager
+def _course_style():
+    """The course figure style (Open Sans, 920 px wide) for everything drawn inside; yields pyplot."""
+
+    import matplotlib.pyplot as plt
+
+    from .common import register_course_fonts
+
+    register_course_fonts()  # before the style names the course font
+    with plt.style.context(str(_STYLE)):
+        yield plt
+
+
 def _show(figure, alt: str) -> None:
     """Show a figure drawn in the course figure style as one 920 px picture."""
 
@@ -318,17 +340,12 @@ def plot_interaction_curves(scan_labels, **energies) -> None:
     is the green line and the others are grey. No reference points, no error numbers.
     """
 
-    import matplotlib.pyplot as plt
-
-    from . import common
-
     colors = {"wrapped": _GREEN}
     curves = {key: _interaction(value, scan_labels) for key, value in energies.items()}
     scale = np.array([lab["scale"] for lab in scan_labels])
     systems = tuple(dict.fromkeys(lab["system_name"] for lab in scan_labels))
     system_of = np.array([lab["system_name"] for lab in scan_labels])
-    common.register_course_fonts()
-    with plt.style.context(str(_STYLE)):
+    with _course_style() as plt:
         figure, axes = plt.subplots(1, len(systems), figsize=(9.2, 4.0), sharex=True, squeeze=False)
         for axis, system in zip(axes.ravel(), systems):
             mask = system_of == system
@@ -355,10 +372,9 @@ def plot_interaction_curves(scan_labels, **energies) -> None:
 
 
 # --------------------------------------------------------------------------
-# Parked: the views and checks of the pieces that left this notebook with plan 3 (the timestep scan,
-# the proton hop, the two-name check of the wrapped model). Nothing in the notebook calls them and
-# `check <step>` does not list them. They are kept, unchanged, for the notebook that takes the
-# timestep piece (or for option C of the board question a05q-shape):
+# Kept for a later notebook: the loaders, views and checks of three pieces that are not steps of
+# this notebook (a timestep scan, a proton hop, a two-name check of the wrapped model). No cell
+# calls them and `check <step>` does not list them; the tests keep them working:
 # `load_aspirin`, `load_malonaldehyde`, `plot_timestep_scan`, `show_proton_hop`, `_parked_problems`.
 # --------------------------------------------------------------------------
 _SEED = 7  # fixed embedding seed: the same geometry on every machine
@@ -419,10 +435,7 @@ def plot_timestep_scan(replica_dt, saved_step, total_energy) -> None:
     whose energy becomes non-finite is drawn to its last finite point and marked.
     """
 
-    import matplotlib.pyplot as plt
     import torch
-
-    from . import common
 
     dt = torch.as_tensor(replica_dt).detach().cpu().double().flatten().numpy()
     step = torch.as_tensor(saved_step).detach().cpu().double().flatten().numpy()
@@ -430,8 +443,7 @@ def plot_timestep_scan(replica_dt, saved_step, total_energy) -> None:
     if energy.shape != (len(step), len(dt)):
         raise ValueError("total_energy must have shape (n_saved, n_replicas)")
     change = (energy - energy[0]) * 1000.0  # meV from each copy's first saved value
-    common.register_course_fonts()
-    with plt.style.context(str(_STYLE)):
+    with _course_style() as plt:
         figure, axis = plt.subplots(figsize=(9.2, 4.0))
         order = np.argsort(dt)
         ends = []   # (label, x, y, colour) at each line's last point
@@ -457,8 +469,6 @@ def plot_timestep_scan(replica_dt, saved_step, total_energy) -> None:
 
 def _label_line_ends(axis, ends, gap_pt=4.0, steps_pt=(0, 8, -8, 14, -14, 20, -20)):
     """Name each line at its end, nudged up or down until no other line runs under the name."""
-
-    import numpy as np
 
     figure = axis.figure
     figure.canvas.draw()
@@ -500,16 +510,12 @@ def show_proton_hop(hop_store, hop_distance, cv_grid, free_energy) -> None:
     The walkers are grey; the free-energy profile is green.
     """
 
-    import matplotlib.pyplot as plt
     import torch
-
-    from . import common
 
     distance = torch.as_tensor(hop_distance).detach().cpu().double().numpy()
     grid = torch.as_tensor(cv_grid).detach().cpu().double().numpy()
     profile = torch.as_tensor(free_energy).detach().cpu().double().numpy()
-    common.register_course_fonts()
-    with plt.style.context(str(_STYLE)):
+    with _course_style() as plt:
         figure, (left, right) = plt.subplots(1, 2, figsize=(9.2, 4.0), gridspec_kw={"width_ratios": [1.5, 1]})
         for walker in range(distance.shape[1]):
             left.plot(distance[:, walker], linewidth=1.0, alpha=0.8, color=_GREY if walker == 0 else _LIGHT_GREY)
@@ -533,7 +539,7 @@ _PARKED_STEPS = {
 
 
 def _parked_problems(step: str, ns: dict) -> list[str]:
-    """One plain line per problem for a parked step (the checks as they stood on 25 Nov)."""
+    """One plain line per problem for one of the three kept steps."""
 
     import torch
 
@@ -601,11 +607,6 @@ _SCRIPT_NAMES = {"__file__"}
 _PAIR_RELATION_LIMIT = 5.0  # kcal/mol: mean |wrapped - composed| interaction energy on the scans
 
 
-def _shape(value):
-    shape = getattr(value, "shape", None)
-    return tuple(shape) if shape is not None else None
-
-
 def _unexpected_pairs(energy, ns) -> list[str]:
     """Lines for a wrapped-model curve that departs from the composed model's curve by a lot."""
 
@@ -654,107 +655,148 @@ def _largest_start(ns: dict, relaxed) -> tuple[str | None, int]:
     return best
 
 
-def _problems(step: str, ns: dict) -> tuple[list[str], list[str]]:
-    """Return (problems, notes): one plain line per problem, and the 'unexpected' lines."""
+def _need(step: str, name: str, ns: dict, problems: list[str]):
+    """The value of a name the step file should have created; None, with a line, when it is missing."""
+
+    if name not in ns:
+        problems.append(f"{step}: {name} is missing; the step file should create it")
+        return None
+    return ns[name]
+
+
+def _finite(step: str, name: str, value, problems: list[str]) -> None:
+    import torch
+
+    if not bool(torch.isfinite(torch.as_tensor(value).double()).all()):
+        problems.append(f"{step}: {name} should be finite everywhere; found values that are not (nan or inf)")
+
+
+def _wrapper_problems(step: str, ns: dict, problems: list[str], notes: list[str]) -> None:
+    """aceff_model returns energy and forces of the right shapes on scan_batch, on the GPU when there is one."""
 
     import torch
 
+    model = _need(step, "aceff_model", ns, problems)
+    if model is None:
+        return
+    config = getattr(model, "model_config", None)
+    if config is None or not {"energy", "forces"} <= set(config.active_outputs):
+        problems.append(f"{step}: aceff_model should return energy and forces; its outputs are different")
+        return
+    if torch.cuda.is_available() and next(model.parameters()).device.type != "cuda":
+        problems.append(f"{step}: aceff_model should be on the gpu; found {next(model.parameters()).device}")
+        return
+    out = model(ns["scan_batch"].clone())
+    n = ns["scan_batch"].num_graphs
+    if _shape(out["energy"]) != (n, 1):
+        problems.append(
+            f"{step}: the energy of aceff_model on scan_batch should have shape ({n}, 1); "
+            f"found {_shape(out['energy'])}"
+        )
+    if _shape(out["forces"]) != (ns["scan_batch"].num_nodes, 3):
+        problems.append(
+            f"{step}: the forces of aceff_model should have shape (n_atoms, 3) = "
+            f"({ns['scan_batch'].num_nodes}, 3); found {_shape(out['forces'])}"
+        )
+    _finite(step, "the energy of aceff_model", out["energy"], problems)
+    notes += _unexpected_pairs(out["energy"].detach(), ns)
+
+
+def _pairs_problems(step: str, ns: dict, problems: list[str], notes: list[str]) -> None:
+    """aceff_energy has one finite row for each structure of scan_batch."""
+
+    energy = _need(step, "aceff_energy", ns, problems)
+    if energy is None:
+        return
+    want = _shape(ns.get("composed_energy"))
+    if _shape(energy) != want:
+        problems.append(
+            f"{step}: aceff_energy should have shape {want} in eV (one row for each structure of "
+            f"scan_batch); found {_shape(energy)}"
+        )
+        return
+    _finite(step, "aceff_energy", energy, problems)
+    notes += _unexpected_pairs(energy, ns)
+
+
+def _relax_problems(step: str, ns: dict, problems: list[str], notes: list[str]) -> None:
+    """Every molecule of relaxed_batch has its largest force below force_threshold, and
+    relaxed_max_force holds those forces."""
+
+    import torch
+
+    batch, force, threshold = [
+        _need(step, name, ns, problems) for name in ("relaxed_batch", "relaxed_max_force", "force_threshold")
+    ]
+    if batch is None or force is None or threshold is None:
+        return
+    n = getattr(batch, "num_graphs", None)
+    f = torch.as_tensor(force).detach().cpu().double()
+    if n is None:
+        problems.append(f"{step}: relaxed_batch should be a Batch of molecules; found {type(batch).__name__}")
+        return
+    if tuple(f.shape) != (n,):
+        problems.append(
+            f"{step}: relaxed_max_force should have one value for each molecule, shape ({n},) in "
+            f"eV/Å; found shape {tuple(f.shape)}"
+        )
+        return
+    if torch.as_tensor(threshold).numel() != 1 or not float(threshold) > 0:
+        problems.append(f"{step}: force_threshold should be one number above 0, in eV/Å")
+        return
+    limit = float(threshold)
+    _finite(step, "relaxed_max_force", f, problems)
+    names = _formula(batch)
+    above = [f"{name} ({_force_text(v, limit)})" for name, v in zip(names, f.tolist()) if not _below(v, limit)]
+    if above:
+        problems.append(f"{step}: " + _WORDS["above_threshold"].format(limit=limit, names=", ".join(above)))
+    model = ns.get("aceff_model")
+    if model is not None:
+        off = (_largest_forces(model, batch).cpu().double() - f).abs().max().item()
+        if off > 1e-3:
+            problems.append(
+                f"{step}: relaxed_max_force should be the largest force on an atom of each molecule "
+                f"after the relaxation; a fresh call of aceff_model gives values up to {off:.4f} eV/Å away"
+            )
+    sizes = batch.num_nodes_per_graph.detach().cpu().long().tolist()
+    large = [f"{name} ({size} atoms)" for name, size in zip(names, sizes) if size > _TRAINED_ATOMS]
+    if large:
+        verb = " is" if len(large) == 1 else " are"
+        notes.append(_WORDS["note_size"].format(names=", ".join(large) + verb, limit=_TRAINED_ATOMS))
+    start, count = _largest_start(ns, batch)
+    if count > n:
+        text = _WORDS["left_out"].format(n=n, name=start, m=count, k=count - n)
+        notes.append(_WORDS["unexpected"].format(text=text))
+
+
+def _largest_forces(model, batch):
+    """The largest force on an atom of each molecule, from a fresh call of the model on a copy."""
+
+    import torch
+
+    fresh = model(batch.clone())["forces"].detach().norm(dim=-1)
+    per = torch.zeros(batch.num_graphs, device=fresh.device, dtype=fresh.dtype)
+    return per.scatter_reduce(0, batch.batch_idx.long(), fresh, reduce="amax", include_self=False)
+
+
+_STEP_PROBLEMS = {
+    "aceff_wrapper": _wrapper_problems,
+    "aceff_pairs": _pairs_problems,
+    "aceff_relax": _relax_problems,
+}
+
+
+def _problems(step: str, ns: dict) -> tuple[list[str], list[str]]:
+    """Return (problems, notes): one plain line per problem, and the lines that still pass."""
+
     problems: list[str] = []
     notes: list[str] = []
-
-    def need(name):
-        if name not in ns:
-            problems.append(f"{step}: {name} is missing; the step file should create it")
-            return None
-        return ns[name]
-
-    def finite(name, value):
-        if not bool(torch.isfinite(torch.as_tensor(value).double()).all()):
-            problems.append(f"{step}: {name} should be finite everywhere; found values that are not (nan or inf)")
-
-    if step == "aceff_wrapper":
-        model = need("aceff_model")
-        if model is not None:
-            config = getattr(model, "model_config", None)
-            if config is None or not {"energy", "forces"} <= set(config.active_outputs):
-                problems.append(f"{step}: aceff_model should return energy and forces; its outputs are different")
-            elif torch.cuda.is_available() and next(model.parameters()).device.type != "cuda":
-                problems.append(f"{step}: aceff_model should be on the gpu; found {next(model.parameters()).device}")
-            else:
-                out = model(ns["scan_batch"].clone())
-                n = ns["scan_batch"].num_graphs
-                if _shape(out["energy"]) != (n, 1):
-                    problems.append(
-                        f"{step}: the energy of aceff_model on scan_batch should have shape ({n}, 1); "
-                        f"found {_shape(out['energy'])}"
-                    )
-                if _shape(out["forces"]) != (ns["scan_batch"].num_nodes, 3):
-                    problems.append(
-                        f"{step}: the forces of aceff_model should have shape (n_atoms, 3) = "
-                        f"({ns['scan_batch'].num_nodes}, 3); found {_shape(out['forces'])}"
-                    )
-                finite("the energy of aceff_model", out["energy"])
-                notes += _unexpected_pairs(out["energy"].detach(), ns)
-    elif step == "aceff_pairs":
-        energy = need("aceff_energy")
-        if energy is not None:
-            want = _shape(ns.get("composed_energy"))
-            if _shape(energy) != want:
-                problems.append(
-                    f"{step}: aceff_energy should have shape {want} in eV (one row for each structure of "
-                    f"scan_batch); found {_shape(energy)}"
-                )
-            else:
-                finite("aceff_energy", energy)
-                notes += _unexpected_pairs(energy, ns)
-    elif step == "aceff_relax":
-        batch, force, threshold = need("relaxed_batch"), need("relaxed_max_force"), need("force_threshold")
-        model = ns.get("aceff_model")
-        if batch is not None and force is not None and threshold is not None:
-            n = getattr(batch, "num_graphs", None)
-            f = torch.as_tensor(force).detach().cpu().double()
-            if n is None:
-                problems.append(f"{step}: relaxed_batch should be a Batch of molecules; found {type(batch).__name__}")
-            elif tuple(f.shape) != (n,):
-                problems.append(
-                    f"{step}: relaxed_max_force should have one value for each molecule, shape ({n},) in "
-                    f"eV/Å; found shape {tuple(f.shape)}"
-                )
-            elif torch.as_tensor(threshold).numel() != 1 or not float(threshold) > 0:
-                problems.append(f"{step}: force_threshold should be one number above 0, in eV/Å")
-            else:
-                limit = float(threshold)
-                finite("relaxed_max_force", f)
-                names = _formula(batch)
-                above = [f"{name} ({_force_text(v, limit)})" for name, v in zip(names, f.tolist()) if not _below(v, limit)]
-                if above:
-                    problems.append(f"{step}: " + _WORDS["above_threshold"].format(limit=limit, names=", ".join(above)))
-                if model is not None:
-                    fresh = model(batch.clone())["forces"].detach().norm(dim=-1)
-                    owner = batch.batch_idx.long()
-                    per = torch.zeros(n, device=fresh.device, dtype=fresh.dtype).scatter_reduce(
-                        0, owner, fresh, reduce="amax", include_self=False
-                    )
-                    off = (per.cpu().double() - f).abs().max().item()
-                    if off > 1e-3:
-                        problems.append(
-                            f"{step}: relaxed_max_force should be the largest force on an atom of each molecule "
-                            f"after the relaxation; a fresh call of aceff_model gives values up to {off:.4f} eV/Å away"
-                        )
-                sizes = batch.num_nodes_per_graph.detach().cpu().long().tolist()
-                large = [f"{name} ({size} atoms)" for name, size in zip(names, sizes) if size > _TRAINED_ATOMS]
-                if large:
-                    verb = " is" if len(large) == 1 else " are"
-                    notes.append(_WORDS["note_size"].format(names=", ".join(large) + verb, limit=_TRAINED_ATOMS))
-                start, count = _largest_start(ns, batch)
-                if count > n:
-                    text = _WORDS["left_out"].format(n=n, name=start, m=count, k=count - n)
-                    notes.append(_WORDS["unexpected"].format(text=text))
+    _STEP_PROBLEMS[step](step, ns, problems, notes)
     return problems, notes
 
 
 def _check(step: str) -> int:
-    import traceback
+    """Run the setup cell, the earlier files and the step's file; print the verdict. Returns the exit code."""
 
     if step not in _STEPS:
         print(_WORDS["check_unknown"].format(step=step, steps=", ".join(_STEPS)))
@@ -775,17 +817,13 @@ def _check(step: str) -> int:
         before = set(ns)
         try:
             exec(compile(path.read_text(), str(path), "exec"), ns)
-        except NameError as error:
-            if getattr(error, "name", None) not in _SCRIPT_NAMES:
+        except Exception as error:
+            if isinstance(error, NameError) and getattr(error, "name", None) in _SCRIPT_NAMES:
+                print("problem:", _WORDS["script_name"].format(step=step, file=path.name, name=error.name))
+                print(_WORDS["check_problems"].format(n=1))
+            else:
                 traceback.print_exc()
                 print(_WORDS["check_failed"].format(file=path.name))
-                return 1
-            print("problem:", _WORDS["script_name"].format(step=step, file=path.name, name=error.name))
-            print(_WORDS["check_problems"].format(n=1))
-            return 1
-        except Exception:
-            traceback.print_exc()
-            print(_WORDS["check_failed"].format(file=path.name))
             return 1
     ns["_step_names"] = set(ns) - before  # the names the step's own file created
     found, notes = _problems(step, ns)

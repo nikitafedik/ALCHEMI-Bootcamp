@@ -16,10 +16,9 @@ each variable is in the helper's docstring (`help(helpers.<name>)`).
 
 ## The six prompts
 
-Saved again on 26 Nov 2026 (revision F) from each step's text, table and
-Hints alone, after the text was final. Nothing a step does not say is in
-its prompt. Not trialled in this form; the earlier trialled prompts are in
-the records below.
+Saved on 26 Nov 2026 from each step's text, table and Hints alone. Nothing
+a step does not say is in its prompt. The prompts were not run in this exact
+wording; "How the prompts were tried" below says what was run.
 
 relax_build:
 
@@ -69,13 +68,10 @@ speed_settings ("Try it"):
 > False), first_call_s and repeat_s (s); setting_roles is a dict with a text
 > for cueq and one for compile.
 
-## Records of the earlier, trialled prompts
+## How the prompts were tried
 
-- relax_build to md_run: written by a fresh mid-tier agent from the step
-  tables, trial of 25 Nov 2026 (chain W, GPU; all four passed):
-  `notes/builder-03/chainW/prompts.md`,
-  `notes/evidence/lesson-02/l02-6--20261125-1949--trial-03W.md` and the
-  l02-9, l02-16, l02-19 files of the same trial.
-- temperature_ladder: `notes/evidence/lesson-02/l02-tl-1--20261126-0300--trial-ladder-sonnet.md`
-  and the validation of 26 Nov (`notes/evidence/lesson-02/validation/`).
-- speed_settings: `notes/evidence/lesson-02/l02-speed--20261126-0300--trial-speed-sonnet.md`.
+- relax_build to md_run: an earlier wording, written by a fresh mid-tier
+  agent from the step tables, ran on a GPU on 25 Nov 2026; all four files
+  passed their step checks.
+- temperature_ladder and speed_settings: an earlier wording of each was
+  given to a fresh mid-tier agent on 26 Nov 2026.

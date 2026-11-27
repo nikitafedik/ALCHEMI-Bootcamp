@@ -1,15 +1,14 @@
 # Default prompts of notebook 05, "Guest model"
 
 One prompt per step: a typical learner prompt, each given to a fresh mid-tier agent (Sonnet) that had
-only the prompt, the session lines and the official `nvalchemi-toolkit` skill. The trials named under
-each prompt say what came back. Where the sample files beside this note come from is in `README.md`.
+only the prompt, the session lines and the official `nvalchemi-toolkit` skill. The line under each
+prompt says what came back. Where the sample files beside this note come from is in `README.md`.
 
-Saved again on 26 Nov from the final step text, table and Hint of each step: the words did not change.
 The second relax prompt names four molecules of the learner's choosing, which the step leaves open.
 
 ## Example: wrap AceFF 2.0 (`aceff_wrapper`)
 
-The notebook prints this prompt (board cell l04-5, kept by the educator):
+The notebook prints this prompt:
 
 ```text
 use the nvalchemi-toolkit skill
@@ -21,8 +20,7 @@ use the nvalchemi-toolkit skill
 - give me aceff_model: built from that class, on the gpu, energy in eV, forces in eV/Å
 ```
 
-Trials: T1 (25 Nov, GPU) and T10 (26 Nov, CPU, with the step check; its unedited file is
-`notes/evidence/agent-05/l04-5--20261126-0300--trial-T10/notebooks/agent05_work/aceff_wrapper.py`). Both passed.
+Tried twice: on a GPU (25 Nov 2026) and on a CPU with the step check (26 Nov 2026). Both passed.
 
 ## Try it: the guest beside the composed model (`aceff_pairs`)
 
@@ -35,7 +33,7 @@ use the nvalchemi-toolkit skill
 - give me aceff_energy
 ```
 
-Trials: T7 and T8 (26 Nov, GPU; T8 with the step check). Both passed; the sample is T7's file.
+Tried twice on a GPU (26 Nov 2026), once with the step check. Both passed; the sample is the file of the first.
 
 ## Try it: relax a batch with the guest model (`aceff_relax`)
 
@@ -48,7 +46,7 @@ use the nvalchemi-toolkit skill
 - give me relaxed_batch, relaxed_max_force, force_threshold
 ```
 
-Trial: T9 (26 Nov, GPU, with the step check). Passed; the sample is its file.
+Tried on a GPU with the step check (26 Nov 2026). Passed; the sample is its file.
 
 With molecules of the learner's own:
 
@@ -60,4 +58,4 @@ use the nvalchemi-toolkit skill
 - give me relaxed_batch, relaxed_max_force, force_threshold
 ```
 
-Trial: T11 (26 Nov, CPU, with the step check). Passed, with the note for ibuprofen (33 atoms).
+Tried on a CPU with the step check (26 Nov 2026). Passed, with the note for ibuprofen (33 atoms).

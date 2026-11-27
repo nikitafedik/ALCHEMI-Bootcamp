@@ -26,6 +26,5 @@ Two defaults for the "Try it" pieces. Both load in one call from `helpers/agent0
   contributors, CC BY 4.0; see `../nci_atlas/README.md` and `SOURCES_AND_LICENSES.md`). Three
   complexes at ten separations; AB, A and B at each point; elements H, C, N, O; total charge 0
   or -1; 4 to 25 atoms per structure.
-- How built: the composed model of "Made to order" run once over the 90 structures
-  (record: `notes/evidence/agent-05/l04-try-pairs--20261126-0200--default-pairs.md`).
+- How built: the composed model of "Made to order" run once over the 90 structures.
 - Licence of the energies: derived from the CC BY 4.0 structures by the course's own run.
