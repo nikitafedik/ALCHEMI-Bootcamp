@@ -339,7 +339,7 @@ def image_frequencies(model, batch) -> list[np.ndarray] | str:
     """The projected frequencies of every image of ``batch`` from ``model.compute_hessian``.
 
     Returns one array per image, or the first line of the error when the
-    model gives no Hessian (a model with D3, for example).
+    model gives no Hessian.
     """
 
     try:

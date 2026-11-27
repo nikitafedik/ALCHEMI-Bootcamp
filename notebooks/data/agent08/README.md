@@ -28,20 +28,18 @@ repository (Apache-2.0).
 ```python
 import torch
 from helpers import agent08
-model = agent08.load_model(torch.device("cpu"))   # AIMNet2 (aimnet2-wb97m-d3_0) + Coulomb (15 Å), no D3
+model = agent08.load_model(torch.device("cpu"))   # AIMNet2 (agent08.MODEL_NAME) + Coulomb (15 Å)
 agent08.save_default_reactions(model)              # relaxes all ends to 0.0002 eV/Å and writes reactions-v2.extxyz
 ```
 
 Built on 2026-11-26, CPU, nvalchemi-toolkit 0.3.0, with the notebook's model:
-AIMNet2 with its Coulomb term, no D3. Ends relaxed with D3 in the model carry
-up to 0.020 eV/Å with this model and lie at most 0.004 Å from the saved ones.
+AIMNet2 with its Coulomb term.
 
 ## Verification
 
 - Largest force on an atom, per end, with the notebook's model: 0.00000 to
   0.00014 eV/Å. The loader accepts an end at or below 0.0005 eV/Å and relaxes
-  the ends again with the model at hand when one is above it (with D3 added,
-  for example).
+  the ends again with the model at hand when one is above it.
 - With `neb_settings = dict(num_images=8, fmax=0.003, regular_fmax=0.03,
   n_steps=600)` all four paths converge (stops at steps 74, 97, 248, 94 on
   CPU); barriers 5.57, 1.73, 51.88 and 4.58 kcal/mol; every top image (image
@@ -49,4 +47,4 @@ up to 0.020 eV/Å with this model and lie at most 0.004 Å from the saved ones.
   `model.compute_hessian`, and a force at or below 0.0016 eV/Å. The three
   step checks pass with the sample files (paths, neb, saddle).
 - Model fit: the reactions are small neutral molecules of H, C, N, O, the
-  domain of AIMNet2; the model is AIMNet2 with its Coulomb term, without D3.
+  domain of AIMNet2; the model is AIMNet2 with its Coulomb term.

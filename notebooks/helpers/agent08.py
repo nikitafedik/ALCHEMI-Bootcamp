@@ -50,7 +50,7 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "agent08"
 # The saved default ends, two frames per reaction, relaxed with the notebook's model (AIMNet2 + Coulomb).
 REACTIONS_FILE = DATA_DIR / "reactions-v2.extxyz"
 NOTEBOOK = "notebooks/alchemi-agent-08-paths-of-least-resistance.ipynb"
-# The notebook's model is AIMNet2 with its Coulomb term and without D3: Toolkit's
+# The notebook's model is AIMNet2 with its Coulomb term: Toolkit's
 # model.compute_hessian works on it.
 MODEL_NAME = "aimnet2-wb97m-d3_0"
 COULOMB_CUTOFF = 15.0  # Å
@@ -116,15 +116,13 @@ def _coulomb_adapter(cutoff: float):
     return TwiceDifferentiableCoulomb(cutoff=cutoff)
 
 
-def load_model(device, d3: bool = False):
+def load_model(device):
     """Return the model of the notebook, ready for energies and forces.
 
-    AIMNet2 with its Coulomb term, as composed in "Made to order", without
-    D3. One autograd group: AIMNet2 hands its partial charges to the Coulomb
+    AIMNet2 with its Coulomb term, as composed in "Made to order". One
+    autograd group: AIMNet2 hands its partial charges to the Coulomb
     term (cutoff 15 Å), and the forces come from the summed energy. Energies
     in eV, forces in eV/Å. ``model.compute_hessian`` works on this model.
-    ``d3=True`` adds the D3(BJ) term as a second group; it has no second
-    derivatives in Toolkit 0.3.0, so ``compute_hessian`` refuses that model.
     """
 
     import torch
@@ -144,19 +142,9 @@ def load_model(device, d3: bool = False):
             use_autograd=True,
         )
     ]
-    dispersion = None
-    if bool(d3):
-        from nvalchemi.models import DFTD3ModelWrapper
-
-        from .agent04 import d3_settings
-
-        dispersion = DFTD3ModelWrapper(**d3_settings()).to(device).eval()
-        groups.append(PipelineGroup(steps=[dispersion], use_autograd=False))
     model = PipelineModelWrapper(groups=groups, neighbor_adaptation="always").to(device).eval()
     aimnet.set_config("active_outputs", {"energy", "forces", "charges"})
     coulomb.set_config("active_outputs", {"energy", "forces"})
-    if dispersion is not None:
-        dispersion.set_config("active_outputs", {"energy", "forces"})
     model.set_config("active_outputs", {"energy", "forces", "charges"})
     return model
 
@@ -365,7 +353,7 @@ def load_reactions(model, names=None):
 
     The ends are read from the saved default file ``data/agent08/reactions-v2.extxyz``
     and measured with ``model``. Where a force is above the limit (another
-    model, for example the one with D3), the ends are relaxed again with
+    model, for example), the ends are relaxed again with
     ``model``; the loader raises when they do not get there.
 
     ``names`` picks reactions from ``REACTIONS``; the default is all four.

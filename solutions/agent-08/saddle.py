@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 
 # The Hessian from Toolkit's own model.compute_hessian (the notebook's model, AIMNet2 + Coulomb,
-# gives second derivatives). saddle_fd.py is the same test with finite differences of the forces.
+# gives second derivatives).
 # A saddle point is a stationary point (forces near zero) whose Hessian has exactly one
 # imaginary mode once translations and rotations are removed. Both tests are needed.
 force_tol = 0.005           # eV/A, largest per-atom force norm. A fixed number: it does not

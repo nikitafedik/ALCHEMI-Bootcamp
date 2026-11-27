@@ -249,12 +249,12 @@ def _needs_aimnet2() -> None:
         pytest.skip("AIMNet2 weights are not on this machine")
 
 
-def test_the_model_without_d3_is_the_default():
-    """The notebook's model is AIMNet2 with its Coulomb term, without D3, whatever the environment says."""
+def test_the_model_is_aimnet2_with_its_coulomb_term():
+    """The notebook's model is AIMNet2 with its Coulomb term, whatever the environment says."""
 
     import inspect
 
-    assert inspect.signature(agent08.load_model).parameters["d3"].default is False
+    assert list(inspect.signature(agent08.load_model).parameters) == ["device"]
     assert "os.environ" not in inspect.getsource(agent08.load_model)
     assert "AIMNet2 with its Coulomb term" in agent08.load_model.__doc__
     assert agent08.REACTIONS_FILE.name == "reactions-v2.extxyz"
@@ -315,26 +315,6 @@ def test_configure_tutorial_installs_the_aimnet2_warning_filter():
         assert hits and hits[0][3] is not None and hits[0][3].match("nvalchemi.models.aimnet2")
 
 
-def test_the_d3_variant_refuses_a_dense_hessian():
-    """With ``d3=True``, compute_hessian refuses the D3 term (no second derivatives in Toolkit 0.3.0)."""
-
-    _needs_aimnet2()
-    from helpers.model_support import d3_parameter_file, prepare_model_batch
-
-    agent08.configure_tutorial()
-    try:
-        d3_parameter_file()
-    except RuntimeError as exc:
-        pytest.skip(f"the D3 tables of the course runtime are not prepared here: {exc}")
-    from nvalchemi.data import AtomicData, Batch
-
-    model = agent08.load_model("cpu", d3=True)
-    a, _ = agent08.REACTIONS["ammonia inversion"]()
-    batch = Batch.from_data_list([AtomicData.from_atoms(a, device="cpu")], device="cpu")
-    with pytest.raises(Exception, match="DFTD3ModelWrapper does not support derivative operation"):
-        model.compute_hessian(prepare_model_batch(batch, model))
-
-
 def test_load_reactions_says_the_ends_are_already_laid_over():
     assert "already laid over each other" in agent08.load_reactions.__doc__
 
@@ -361,7 +341,7 @@ def test_relax_refuses_ends_that_did_not_get_there(monkeypatch):
 
     _needs_aimnet2()
     agent08.configure_tutorial()
-    model = agent08.load_model("cpu", d3=False)
+    model = agent08.load_model("cpu")
     a, b = agent08.REACTIONS["ammonia inversion"]()
     with pytest.raises(RuntimeError, match="did not relax: the largest force on an atom is .* after 1 steps"):
         agent08._relax(model, [a, b], fmax=1.0e-9, max_steps=1)
@@ -370,7 +350,7 @@ def test_relax_refuses_ends_that_did_not_get_there(monkeypatch):
 def test_loader_gives_tight_ends_from_the_saved_file():
     _needs_aimnet2()
     agent08.configure_tutorial()
-    model = agent08.load_model("cpu", d3=False)
+    model = agent08.load_model("cpu")
     reactants, products, names = agent08.load_reactions(model)
     assert names == NAMES
     assert max(agent08.largest_forces(model, reactants + products)) <= agent08.RELAX_FMAX == 0.0005
@@ -384,7 +364,7 @@ def test_model_gives_second_derivatives():
     from nvalchemi.data import AtomicData, Batch
 
     agent08.configure_tutorial()
-    model = agent08.load_model("cpu", d3=False)
+    model = agent08.load_model("cpu")
     a, _ = agent08.REACTIONS["ammonia inversion"]()
     batch = Batch.from_data_list([AtomicData.from_atoms(a, device="cpu")], device="cpu")
     from helpers.model_support import prepare_model_batch
@@ -1231,8 +1211,8 @@ def test_neb_watch_counts_runs_and_puts_the_class_back():
 def test_a_setup_cell_that_fails_is_one_line(monkeypatch, capsys):
     """A setup cell that fails gives one line, with no traceback."""
 
-    monkeypatch.setattr(agent08_check, "SETUP_CELL", "raise RuntimeError('D3 parameter file is missing: /x/dftd3_parameters.pt')")
+    monkeypatch.setattr(agent08_check, "SETUP_CELL", "raise RuntimeError('the model file is missing: /x/model.pt')")
     assert agent08_check.main(["agent08", "check", "paths"]) == 1
     assert capsys.readouterr().out.strip() == (
-        "paths: the notebook's setup cell failed: RuntimeError: D3 parameter file is missing: /x/dftd3_parameters.pt"
+        "paths: the notebook's setup cell failed: RuntimeError: the model file is missing: /x/model.pt"
     )
