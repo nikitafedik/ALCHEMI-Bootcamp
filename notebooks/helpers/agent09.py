@@ -91,7 +91,7 @@ LIQUID_SHORTEST = 1.0  # Å, shortest distance in every frame (DFT liquid frames
 LIQUID_MSD = 2.0  # Å², mean squared displacement at the end at least this
 LIQUID_MSD_GROWTH = 1.25  # and at least this times its value at half time
 LIQUID_LEAST_STEPS = 200  # a shorter run is not judged
-# "Follows the teacher": every pair's first peak within one 0.1 Å bin of the teacher's; the divergence of the
+# "Follows the teacher": every pair's highest peak within one 0.1 Å bin of the teacher's; the divergence of the
 # curves over all pairs at most ten times the teacher-against-teacher floor (4.3e-6, measured at the course budgets).
 STRUCTURE_FLOOR = 4.3e-6
 STRUCTURE_BOUND = 10 * STRUCTURE_FLOOR
@@ -892,7 +892,7 @@ def follows_teacher(teacher_rdf, student_rdf, partials: dict | None = None) -> d
 
     It follows when the Jensen-Shannon divergence of the two curves over all
     pairs is at most 4.3e-5, ten times the teacher-against-teacher floor, and,
-    with ``partials`` (from ``partial_rdfs``), every pair's first peak is within
+    with ``partials`` (from ``partial_rdfs``), every pair's highest peak is within
     one 0.1 Å bin of the teacher's. Fewer than 160 frames on either side are not
     judged.
     """
@@ -910,7 +910,7 @@ def follows_teacher(teacher_rdf, student_rdf, partials: dict | None = None) -> d
         rows.append([name, pair_js, t, s])
         if abs(t - s) > STRUCTURE_PEAK_TOLERANCE + 1e-6:
             reasons.append(
-                f"first {_views.LABELS['structure']['pairs'][name]} peak at {s:.2f} Å, the teacher's at {t:.2f} Å"
+                f"highest {_views.LABELS['structure']['pairs'][name]} peak at {s:.2f} Å, the teacher's at {t:.2f} Å"
             )
     judged = min(teacher_rdf.num_frames, student_rdf.num_frames) >= STRUCTURE_LEAST_FRAMES
     return {
@@ -1040,7 +1040,7 @@ def show_structure(teacher_rdf, student_rdf, labeled_path=None, student_frames_p
     ``teacher_rdf`` and ``student_rdf`` are Toolkit ``RadialDistribution``
     curves over all pairs, with the same bins. With both store paths the helper
     adds the curve of each pair of elements (Si-Si, Si-C, C-C) from the same
-    stores. A table gives each curve's Jensen-Shannon divergence and first peaks;
+    stores. A table gives each curve's Jensen-Shannon divergence and highest peaks;
     one line reads the result (see ``follows_teacher``).
     """
 

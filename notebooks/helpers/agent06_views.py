@@ -618,7 +618,7 @@ def _displacement_figure(data: dict[str, Any]):
             axis.set_title(labels[key])
             axis.set_xlabel(labels["xlabel"])
         axes[0].set_ylabel(labels["ylabel"])
-        axes[0].legend(loc="upper left")
+        axes[1].legend(loc="upper left")
     return figure
 
 

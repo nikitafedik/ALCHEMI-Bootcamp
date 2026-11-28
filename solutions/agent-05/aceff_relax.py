@@ -40,6 +40,6 @@ relaxed_max_force = torch.zeros(relaxed_batch.num_graphs, device=forces.device, 
 
 print("molecule        atoms  largest force (eV/A)")
 for atoms, n, f in zip(molecules, relaxed_batch.num_nodes_per_graph.tolist(), relaxed_max_force.cpu().tolist()):
-    print(f"{atoms.info.get('name', '?'):<14}{n:>6}  {f:.4f}")
+    print(f"{atoms.info.get('name', '?'):<14}{n:>6}  {f:.5f}")
 print("status (1 = converged):", relaxed_batch.status.view(-1).tolist())
-print("all at or below threshold:", bool((relaxed_max_force <= force_threshold).all()))
+print("all below threshold:", bool((relaxed_max_force < force_threshold).all()))

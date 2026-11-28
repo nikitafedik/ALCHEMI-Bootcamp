@@ -14,6 +14,7 @@ fuse nvt and nve in one batch for my trajectories: each starts in nvt at 300 k a
 input: trajectories, composed_model, stage_settings, max_batch_size, max_atoms
 output: build_stages (a function that returns a fresh nvt and nve pair, nvt with its stopping rule), fused_batches, fused_seconds, stage_trace
 keep the nvt stopping rule per trajectory by simulation_id. stage_trace holds two integers per trajectory, in simulation_id order: the md step of the move to nve and the md step of the finish.
+time the run with helpers.time_route(device) around all of it, the building of its batches included.
 write it to agent07_work/fused.py
 ```
 

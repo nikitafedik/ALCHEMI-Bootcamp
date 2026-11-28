@@ -103,7 +103,7 @@ LABELS = {
         "student": "student's run",
         "total": "All pairs",
         "pairs": {"SiSi": "Si-Si", "SiC": "Si-C", "CC": "C-C"},
-        "headers": ["Pairs", "Jensen-Shannon divergence", "First peak, teacher [Å]", "First peak, student [Å]"],
+        "headers": ["Pairs", "Jensen-Shannon divergence", "Highest peak, teacher [Å]", "Highest peak, student [Å]"],
         "alt": (
             "Radial distribution functions g(r) of the teacher's sampling run and of the student's run, "
             "one panel for all pairs and one for each pair of elements."
@@ -169,7 +169,7 @@ DIVERGENCE_NONE = "no divergence"
 DIVERGENCE_AT = "a divergence at step {step}"
 STRUCTURE_FOLLOWS = (
     "The student's structure follows the teacher's: the divergence over all pairs is {js:.1e} (at most "
-    "{bound:.1e}), and every first peak of a pair of elements is within {tol:.1f} Å of the teacher's."
+    "{bound:.1e}), and every highest peak of a pair of elements is within {tol:.1f} Å of the teacher's."
 )
 STRUCTURE_UNEXPECTED = "Unexpected: the student's structure departs from the teacher's ({why})."
 STRUCTURE_SHORT = (

@@ -46,7 +46,7 @@ use the nvalchemi-toolkit skill
 - give me relaxed_batch, relaxed_max_force, force_threshold
 ```
 
-Tried on a GPU with the step check (26 Nov 2026). Passed; the sample is its file.
+Tried on a GPU with the step check (26 Nov 2026). Passed; the sample is its file with two print lines changed.
 
 With molecules of the learner's own:
 

@@ -27,10 +27,11 @@ and draws nothing.
 
 ## separation_hook
 
-> Repeat the plain run and, with a hook of your own, record two distances for
-> each complex on the steps of the interaction energy: the separation between
-> the centers of mass of its two fragments, and the nearest contact, the
-> shortest distance between an atom of one fragment and an atom of the other.
+> Repeat the plain run from the same start and with the same seed. Every 10
+> steps, as for the interaction energy, record with a hook of your own two
+> distances for each complex: the separation between the centers of mass of
+> its two fragments, and the nearest contact, the shortest distance between
+> an atom of one fragment and an atom of the other.
 > Use complexes, composed_model, run_settings, fragment_a_sizes. Give me
 > separation, nearest_contact in agent06_work/separation_hook.py
 

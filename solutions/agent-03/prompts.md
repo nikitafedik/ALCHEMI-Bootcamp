@@ -32,9 +32,9 @@ relax_build:
 relax_run:
 
 > Write agent03_work/relax_run.py: relax every crystal in crystal_batch with
-> mace_model, and time the batched run beside one-by-one relaxation. Give me
-> relaxed_batch, relaxed_max_force, force_threshold, batch_seconds and
-> single_seconds.
+> mace_model, and time the batched run beside one-by-one relaxation of three
+> of them. Give me relaxed_batch, relaxed_max_force, force_threshold,
+> batch_seconds and single_seconds.
 
 md_build:
 
@@ -53,11 +53,12 @@ temperature_ladder ("Try it"):
 
 > Write agent03_work/temperature_ladder.py: with a thermostat, run copies of
 > one crystal in a single batch, each held at a different temperature, from
-> cold to far too hot, and record the energy of each copy along the run. Use
-> the crystal from helpers.load_ladder_crystal(), with mace_model and
-> n_temperatures. Every copy has the same positions and atomic_numbers; the
-> temperature is one value per copy, shape (n_temperatures,), in K. Give me
-> time_fs, replica_temperature and replica_energy.
+> cold to far too hot, and record the potential energy per atom of each copy
+> along the run. Use the crystal from helpers.load_ladder_crystal(), with
+> mace_model and n_temperatures. Every copy has the same positions and
+> atomic_numbers; the temperature is one value per copy, shape
+> (n_temperatures,), in K. Give me time_fs, replica_temperature and
+> replica_energy.
 
 speed_settings ("Try it"):
 

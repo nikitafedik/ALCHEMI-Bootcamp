@@ -235,7 +235,7 @@ def test_follows_teacher_reads_the_divergence_and_the_partial_peaks():
     same = helpers.follows_teacher(_rdf(1.85), _rdf(1.85), {"SiC": (_rdf(1.85), _rdf(1.85))})
     assert same["judged"] and same["follows"] and "follows the teacher's" in views.structure_line(same)
     shifted = helpers.follows_teacher(_rdf(1.85), _rdf(1.85), {"SiSi": (_rdf(2.45), _rdf(2.75))})
-    assert not shifted["follows"] and "first Si-Si peak at 2.75 Å" in shifted["reasons"][0]
+    assert not shifted["follows"] and "highest Si-Si peak at 2.75 Å" in shifted["reasons"][0]
     apart = helpers.follows_teacher(_rdf(1.85), _rdf(2.95))
     assert not apart["follows"] and "Unexpected" in views.structure_line(apart)
     few = helpers.follows_teacher(_rdf(1.85, frames=6), _rdf(1.85, frames=6))
