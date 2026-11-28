@@ -1,0 +1,10 @@
+gpu,route,structures,structure_steps_per_s,source
+NVIDIA L40S,plain,1,32.5,v4 grid a1u1g-mil-0620
+NVIDIA L40S,plain,8,205.1,v4 grid (cold first repeat dropped)
+NVIDIA L40S,plain,32,240.8,v4 grid
+NVIDIA L40S,plain,128,248.5,v4 grid
+NVIDIA H100 80GB HBM3,plain,1,28.8,v4 grid ipp2-0709
+NVIDIA H100 80GB HBM3,plain,8,228.8,v4 grid (cold first repeat dropped)
+NVIDIA H100 80GB HBM3,plain,32,459.2,v4 grid
+NVIDIA H100 80GB HBM3,plain,128,559.5,v4 grid
+NVIDIA H100 80GB HBM3,plain,512,589.7,v4 grid

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Focused tests for synchronized runtime asset preparation and validation."""
 
 from __future__ import annotations
@@ -266,6 +269,17 @@ def test_runtime_check_rejects_missing_d3_parameter_file(tmp_path: Path) -> None
         )
 
 
+def test_runtime_check_accepts_available_python_headers(tmp_path: Path) -> None:
+    (tmp_path / "Python.h").write_text("/* test header */\n")
+
+    assert check_runtime.require_python_headers(tmp_path) == tmp_path / "Python.h"
+
+
+def test_runtime_check_rejects_missing_python_headers(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Python development header is missing"):
+        check_runtime.require_python_headers(tmp_path)
+
+
 def test_runtime_check_rejects_mismatched_d3_parameter_file(tmp_path: Path) -> None:
     parameter_file = tmp_path / "dftd3_parameters.pt"
     parameter_file.write_bytes(b"not the pinned D3 parameters")
@@ -291,25 +305,38 @@ def test_main_preserves_aimnet_prepare_and_verify_behavior(
     d3_path = tmp_path / "dftd3" / "dftd3_parameters.pt"
     d3_path.parent.mkdir()
     d3_path.write_bytes(b"verified D3 parameters")
+    mace_checkpoint = tmp_path / "mace" / "checkpoint.model"
+    mace_checkpoint.parent.mkdir()
+    mace_checkpoint.write_bytes(b"verified MACE checkpoint")
     resolved_aliases: list[str] = []
+    resolved_mace_aliases: list[str] = []
 
     pins = deepcopy(prewarm_assets.PINS)
     pins["model"]["checkpoint_alias"] = alias
     pins["model"]["checkpoint_sha256"] = _sha256(checkpoint.read_bytes())
+    pins["mace"]["checkpoint_sha256"] = _sha256(mace_checkpoint.read_bytes())
     pins["dispersion"]["generated_parameter_sha256"] = _sha256(d3_path.read_bytes())
 
     def resolve_model(requested_alias: str) -> Path:
         resolved_aliases.append(requested_alias)
         return checkpoint
 
+    def resolve_mace_model(requested_alias: str) -> Path:
+        resolved_mace_aliases.append(requested_alias)
+        return mace_checkpoint
+
     prewarm_assets.main(
         pins=pins,
         environment={"ALCHEMI_D3_PARAM_FILE": str(d3_path)},
         model_resolver=resolve_model,
+        mace_model_resolver=resolve_mace_model,
     )
 
     assert resolved_aliases == [alias]
-    assert f"AIMNet checkpoint verified: {checkpoint}" in capsys.readouterr().out
+    assert resolved_mace_aliases == [pins["mace"]["checkpoint_alias"]]
+    output = capsys.readouterr().out
+    assert f"AIMNet checkpoint verified: {checkpoint}" in output
+    assert f"MACE checkpoint verified: {mace_checkpoint}" in output
     assert checkpoint.read_bytes() == b"verified AIMNet checkpoint"
 
 

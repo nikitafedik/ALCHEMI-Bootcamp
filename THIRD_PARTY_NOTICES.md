@@ -1,86 +1,153 @@
 # Third-party notices
 
-This file covers the external software and runtime downloads used by the Core
-playbook. The repository vendors only the 3Dmol.js browser bundle described
-below. Model checkpoints and generated D3 parameters stay in the user's runtime
-cache.
+This file covers external software, scientific data, and runtime downloads used
+by the Core notebooks. Full installed-package license texts are collected in
+`.licenses/Third_party_attr.txt`. Scientific data attribution and file hashes
+are recorded in `SOURCES_AND_LICENSES.md`.
 
-## NVIDIA ALCHEMI Toolkit and Toolkit-Ops
+## Material copied into the source repository
 
-The tutorial pins NVIDIA ALCHEMI Toolkit and Toolkit-Ops to immutable Git
-commits in `environment/runtime-pins.toml`.
+| Material | Terms | Local notice |
+|---|---|---|
+| NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/data/nci_atlas/README.md` |
+| Mg-MOF-74 primitive structure | MIT | `notebooks/data/mof74/README.md` |
+| SiC-TGAP liquid cut for agentic notebook 09 (adapted; changes listed in the notice) | CC BY 4.0 | `notebooks/data/agent09/sic-tgap/cut/LICENSE` |
+| 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
+| py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
+| three.js 0.186.1 bundle | MIT | `shared/three-0.186.1/LICENSE` |
+| Open Sans font files (Regular, Bold) for course figures | SIL OFL 1.1 | `shared/fonts/OFL.txt` |
+| Lucide icon shapes in course graphics (`notebooks/assets/core00-*.svg`, `explore-*-light.svg`, `fork-*-light.svg`) | ISC | `shared/lucide-icons/LICENSE` |
 
-- Toolkit source and Apache-2.0 license:
-  <https://github.com/NVIDIA/nvalchemi-toolkit>
-- Toolkit-Ops source and Apache-2.0 license:
-  <https://github.com/NVIDIA/nvalchemi-toolkit-ops>
+### NCI Atlas data
 
-Toolkit uses PyTorch tensors in the Core playbook. PyTorch is distributed under
-a BSD-style license. ASE supplies the molecular structures and is distributed
-under LGPL-2.1-or-later.
+The two included data files are attributed to Jan Řezáč and NCI Atlas
+contributors. The upstream README links its `Creative Commons CC-BY` statement
+to the [Creative Commons Attribution 4.0 International license](https://creativecommons.org/licenses/by/4.0/).
+The source, citations, checksums, and change descriptions are in
+[`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md) and the adjacent data
+README.
 
-- PyTorch source and license: <https://github.com/pytorch/pytorch>
-- ASE source and license: <https://gitlab.com/ase/ase>
+### py3Dmol and 3Dmol.js
 
-## py3Dmol and 3Dmol.js
+The Core notebooks display structures with
+[py3Dmol 2.5.5](https://pypi.org/project/py3Dmol/), an MIT-licensed Python
+wrapper, and [3Dmol.js 2.5.5](https://github.com/3dmol/3Dmol.js), a
+BSD-3-Clause browser renderer. The repository stores the checked JavaScript
+bundle, its minifier notice, the complete 3Dmol.js incorporated-code notices,
+and a copy of the py3Dmol MIT license.
 
-The Core playbook displays ASE structures with `py3Dmol 2.5.5`, a Python
-wrapper that emits a 3Dmol.js viewer as notebook HTML.
+Live interactive viewers use the same checked 3Dmol.js bundle. The notices
+under `shared/3dmol-2.5.5/` apply to the standalone file and generated viewer
+HTML.
 
-- py3Dmol: MIT license, <https://pypi.org/project/py3Dmol/>
-- 3Dmol.js: BSD-3-Clause license, <https://github.com/3dmol/3Dmol.js>
-- 3Dmol.js paper: <https://doi.org/10.1093/bioinformatics/btu829>
+3Dmol.js publication: <https://doi.org/10.1093/bioinformatics/btu829>
 
-The repository bundles these files from the `3dmol` npm package at version
-2.5.5:
+### three.js
 
-| Bundled file | Contents |
-|---|---|
-| `shared/3dmol-2.5.5/3Dmol-min.js` | Minified 3Dmol.js renderer from `build/3Dmol-min.js` |
-| `shared/3dmol-2.5.5/3Dmol-min.js.LICENSE.txt` | Attribution notice referenced by the minified file |
-| `shared/3dmol-2.5.5/LICENSE` | BSD-3-Clause license text covering 3Dmol.js and incorporated code |
+The Module 00 structure explorer and relaxation player draw structures with
+[three.js 0.186.1](https://github.com/mrdoob/three.js), an MIT-licensed
+WebGL library. The repository stores the checked bundle and its license under
+`shared/three-0.186.1/`; the course viewer code that uses it is in
+`shared/alchemi-viewer/`.
 
-The npm integrity value and file SHA-256 values are recorded in
-`environment/runtime-pins.toml` and checked by `environment/check_runtime.py`.
+### Open Sans
 
-## AIMNet2 and `aimnet`
+Course figures drawn with Matplotlib use [Open Sans](https://github.com/googlefonts/opensans),
+Copyright 2020 The Open Sans Project Authors, licensed under the SIL Open Font
+License, Version 1.1. The repository stores `OpenSans-Regular.ttf`,
+`OpenSans-Bold.ttf` and the license text `OFL.txt` under `shared/fonts/`.
 
-The Core playbook uses `aimnet 0.2.0` and ensemble member
-`aimnet2_wb97m_d3_0` from the AIMNet2 ωB97M-D3 release.
+### RASPA2 Mg-MOF-74 data
 
-- source and documentation: <https://github.com/isayevlab/aimnetcentral>
-- package: <https://pypi.org/project/aimnet/>
-- model card and weights: <https://huggingface.co/isayevlab/aimnet2-wb97m-d3>
-- model paper: <https://doi.org/10.1039/D4SC08572H>
+The included 54-atom Mg-MOF-74 primitive CIF is derived from the Mg-MOF-74
+structure distributed with iRASPA/RASPA2 under the MIT License. The pinned
+source revision, source and derivative hashes, primitive-cell transformation,
+attribution, and citations are recorded in
+[`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md) and the adjacent data
+README.
 
-The source repository and model card list the software and weights under the
-MIT license. Runtime setup downloads the checkpoint from the official model
-registry, verifies its SHA-256 value, and stores it outside the repository.
+## Installed software
 
-## DFT-D3 reference parameters
+### NVIDIA ALCHEMI Toolkit and Toolkit-Ops
 
-Toolkit's D3 setup reads the legacy Grimme DFT-D3 source archive and generates
-a parameter table in the user's runtime cache. The repository records and
-checks the generated file's SHA-256 value; it does not distribute the generated
-table or the legacy archive.
+The tutorials pin Toolkit and Toolkit-Ops to immutable commits in
+`environment/runtime-pins.toml`.
 
-- Toolkit-Ops dispersion documentation:
-  <https://nvidia.github.io/nvalchemi-toolkit-ops/examples/dispersion/index.html>
-- official Grimme DFT-D3 download page:
-  <https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3/get_dft-d3>
+- [Toolkit Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit/blob/8c2c307c1c0c76baee6f7a68eb75a45da83ffd18/LICENSE)
+- [Toolkit-Ops Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit-ops/blob/c1e23460859a784e1d78043bcd1c8af0d1095fa2/LICENSE)
 
-Toolkit checks legacy archive MD5 `a76c752e587422c239c99109547516d2`.
-The legacy `dftd3.f` header states GPL version 1 or later. The generated cache
-has SHA-256 `b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84`.
+### PyTorch, CUDA, and ASE
 
-## MACE and MACE-MP
+Toolkit uses [PyTorch](https://github.com/pytorch/pytorch), distributed under
+BSD-3-Clause. [ASE](https://gitlab.com/ase/ase) supplies structure objects under
+LGPL-2.1-or-later. CUDA wheels use the
+[NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/).
 
-The Core environment installs `mace-torch 0.3.15`. The model-swap example uses
-Toolkit's `MACEWrapper.from_checkpoint("medium-0b2", ...)` path. The named
-MACE-MP checkpoint downloads into the user's runtime cache on first use.
+### AIMNet2 and `aimnet`
 
-- MACE source and MIT license: <https://github.com/ACEsuit/mace>
-- MACE foundation models and MIT license:
-  <https://github.com/ACEsuit/mace-foundations>
+The Core modules use `aimnet 0.2.0` with registry key
+`aimnet2-wb97m-d3_0`, which resolves to `aimnet2_wb97m_d3_0.pt`. Runtime setup
+verifies SHA-256
+`f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28`
+before use. The AIMNet software and corresponding AIMNet2 ωB97M-D3 weights are
+licensed under MIT.
 
-The repository does not distribute MACE checkpoint bytes.
+- [AIMNetCentral source and MIT license](https://github.com/isayevlab/aimnetcentral)
+- [AIMNet2 ωB97M-D3 model card](https://huggingface.co/isayevlab/aimnet2-wb97m-d3)
+- [model paper](https://doi.org/10.1039/D4SC08572H)
+
+The runtime cache holds checkpoint bytes. The source distribution carries the
+alias, hash, model card, and license notice.
+
+### DFT-D3 reference parameters
+
+Toolkit generates its D3 parameter table by parsing the legacy Grimme DFT-D3
+reference archive. The legacy reference implementation is licensed
+GPL-1.0-or-later. Runtime setup verifies the archive MD5
+`a76c752e587422c239c99109547516d2` and generated-table SHA-256
+`b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84`.
+
+- [official Grimme DFT-D3 page](https://www.chemie.uni-bonn.de/grimme/de/software/dft-d3)
+- [DFT-D3 implementation license comparison](https://dftd3.readthedocs.io/en/latest/comparison.html)
+- [Toolkit-Ops dispersion documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/examples/dispersion/index.html)
+
+Local setup writes the generated table to the runtime cache.
+
+### MACE and MACE-MP
+
+The environment installs `mace-torch 0.3.15`. Runtime setup resolves the
+MIT-licensed MACE-MPA-0 `medium-mpa-0` checkpoint through MACE's official
+resolver and verifies SHA-256
+`75428afe3a1d7d8062e19bcaabd5c433623cabf308242ec9fb493e38604fb638`.
+Core Module 1 uses this checkpoint for the mixed finite and periodic preview.
+
+- [MACE source and MIT license](https://github.com/ACEsuit/mace)
+- [MACE foundation models and MIT license](https://github.com/ACEsuit/mace-foundations)
+- [MACE-MPA-0 model file](https://github.com/ACEsuit/mace-mp/releases/download/mace_mpa_0/mace-mpa-0-medium.model)
+
+Checkpoint bytes stay outside the source repository. The current MACE
+dependency set includes `matscipy` under LGPL-2.1-or-later and
+`python-hostlist` under
+GPL-2.0-or-later. The `.licenses/` inventory records their installed versions
+and license texts.
+
+### AceFF 2.0 and TorchMD-Net
+
+Agentic notebook 05 wraps AceFF 2.0. At run time it resolves the checkpoint
+`aceff_v2.0.ckpt` from the Hugging Face repository `Acellera/AceFF-2.0`
+(SHA-256 `877af6bf84cc69d6d5cbd377a61cfc19c45fb87a00583f7c867e2f9d244cc8fd`)
+and loads it with `torchmd-net 3.1.0`, distributed under the MIT license. The
+model card gives Apache-2.0 for the weights.
+
+- [AceFF 2.0 model card](https://huggingface.co/Acellera/AceFF-2.0)
+- [TorchMD-Net source and MIT license](https://github.com/torchmd/torchmd-net)
+
+Checkpoint bytes stay outside the source repository.
+
+### RDKit
+
+The environment pins [RDKit 2026.3.4](https://pypi.org/project/rdkit/),
+distributed under BSD-3-Clause. Core Module 1 uses RDKit locally to parse
+SMILES, add explicit hydrogens, generate a fixed-seed ETKDGv3 conformer, and
+optimize it with MMFF or UFF. The source repository contains no RDKit binary or
+copied RDKit data.

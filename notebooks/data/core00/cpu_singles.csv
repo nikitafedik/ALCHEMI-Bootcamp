@@ -1,0 +1,13 @@
+key,display_name,atoms,steps,time_s,min_s,max_s,repeats,cpu,threads,source
+ibuprofen,Ibuprofen,33,50,4.331,4.005,4.617,6,AMD EPYC 7313P,32,cpu_singles_v7
+azoxystrobin,Azoxystrobin,47,50,5.756,5.402,6.053,5,AMD EPYC 7313P,32,cpu_singles_v7
+permethrin,Permethrin,46,50,5.878,5.299,6.304,5,AMD EPYC 7313P,32,cpu_singles_v7
+capsaicin,Capsaicin,49,50,6.344,6.243,6.424,4,AMD EPYC 7313P,32,cpu_singles_v7
+c60,Fullerene (C₆₀),60,50,8.967,8.744,9.204,4,AMD EPYC 7313P,32,cpu_singles_v7
+retinol,Retinol,51,50,6.647,6.491,6.804,2,AMD EPYC 7313P,32,cpu_singles_v7
+avobenzone,Avobenzone,45,50,5.525,5.381,5.669,2,AMD EPYC 7313P,32,cpu_singles_v7
+nile_red,Nile red,42,50,5.530,5.343,5.718,2,AMD EPYC 7313P,32,cpu_singles_v7
+dibutyl_phthalate,Dibutyl phthalate,42,50,5.087,4.795,5.572,3,AMD EPYC 7313P,32,cpu_singles_v7
+co_pt111_4x4,CO on Pt(111),50,50,7.467,7.195,7.739,2,AMD EPYC 7313P,32,cpu_singles_v7
+h2o_cu111_4x4,H₂O on Cu(111),51,50,7.954,7.905,8.003,2,AMD EPYC 7313P,32,cpu_singles_v7
+srtio3,Strontium titanate (SrTiO₃),40,50,8.145,8.141,8.149,2,AMD EPYC 7313P,32,cpu_singles_v7

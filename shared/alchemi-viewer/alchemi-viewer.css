@@ -1,0 +1,52 @@
+/* ALCHEMI viewer. Design kit: ink, greys and green; green marks the selected or main thing only;
+   cards with a 1 px rule and radius 10, structure panels radius 8; chips and buttons radius 10 with bold text. Light by default. */
+.av-light { --av-ink: #1A1A1A; --av-ink2: #4A4A4A; --av-mute: #6F6F6F; --av-rule: #D4D4D4; --av-wash: #F4F4F4; --av-panel: #E8EBEE; }
+.av-dark  { --av-ink: #F3F4F6; --av-ink2: #C9CED3; --av-mute: #9AA3AB; --av-rule: #3A444D; --av-wash: #252C32; --av-panel: #252C32; }
+.av-structure, .av-player, .av-picker { --av-nv: #76B900; font-family: "NVIDIA Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px; color: var(--av-ink); }
+.av-canvas { width: 100%; overflow: hidden; border-radius: 8px; touch-action: none; background: var(--av-panel); }
+.av-canvas canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.av-canvas canvas:active { cursor: grabbing; }
+
+/* buttons: one shape for every control */
+.av-btn { font: inherit; font-size: 13px; font-weight: 700; line-height: 1; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--av-rule); background: transparent; color: var(--av-ink); cursor: pointer; }
+.av-btn:hover { border-color: var(--av-nv); }
+.av-btn:focus-visible { outline: 2px solid var(--av-nv); outline-offset: 2px; }
+.av-btn:disabled { color: var(--av-mute); cursor: default; border-color: var(--av-rule); }
+.av-btn-primary, .av-btn.is-on { background: var(--av-nv); border-color: var(--av-nv); color: #FFFFFF; }
+.av-btn-primary { min-width: 72px; }
+.av-chip { display: inline-block; padding: 4px 10px; border-radius: 10px; background: var(--av-nv); color: #FFFFFF;
+  font-size: 12px; font-weight: 700; }
+.av-chip.is-empty { background: transparent; color: var(--av-mute); border: 1px solid var(--av-rule); }
+
+/* player bar */
+.av-bar { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.av-slider { flex: 1; accent-color: var(--av-nv); }
+.av-step { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--av-mute); min-width: 86px; text-align: right; }
+
+/* cards */
+.av-grid { display: grid; grid-template-columns: repeat(var(--av-cols, 3), minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .av-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.av-card { border: 1px solid var(--av-rule); border-radius: 10px; padding: 8px; background: transparent; }
+.av-card.is-selected { border: 2.5px solid var(--av-nv); padding: 6.5px; }
+.av-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin: 0 2px 6px; font-size: 13px; }
+.av-head strong { font-weight: 700; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }   /* names show in full: wrap, never cut */
+/* in the player the panels line up across cards, so every header keeps room for two lines */
+.av-player .av-head { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 2px; min-height: 4.7em; }   /* name gets the full width, atom count below */
+.av-head .av-muted { white-space: nowrap; flex-shrink: 0; }
+.av-muted { color: var(--av-mute); font-size: 12px; }
+.av-readout { margin: 6px 2px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.av-readout b { font-weight: 700; }
+.av-card .av-btn { width: 100%; margin-top: 8px; }
+
+/* picker header */
+.av-pick-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
+.av-pick-head .av-muted { font-size: 13px; }
+
+/* player: one WebGL canvas over the card grid; the cards below keep their layout and events */
+.av-stage { position: relative; }
+.av-overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+.av-canvas:focus-visible { outline: 2px solid var(--av-nv); outline-offset: 2px; }
+/* the moment a system stops: a green check before its name, no words */
+.av-done { vertical-align: -3px; margin-right: 6px; }

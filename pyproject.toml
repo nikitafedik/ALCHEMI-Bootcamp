@@ -1,36 +1,51 @@
 [project]
-name = "alchemi-tutorials-v3"
+name = "alchemi-tutorials"
 version = "0.0.0"
-description = "Locked authoring and runtime environment for the ALCHEMI Toolkit v3 tutorials"
+description = "Locked authoring and runtime environment for the ALCHEMI Toolkit tutorials"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "aimnet==0.2.0",
     "ase==3.27.0",
+    "dm-tree==0.1.10",
     "mace-torch==0.3.15",
     "matplotlib>=3.10,<4",
-    "nvalchemi-toolkit[aimnet,ase,mace] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18",
-    "nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2",
+    "nvalchemi-toolkit[mace,aimnet,cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@77d3c9e930a3eab5f44b61a7ffaf161609e13be2",
+    "nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@6702138e404d40ea79dec62f68c2fa67e858580e",
     "numpy>=2,<2.4",
+    "orb-models==0.7.0",
+    "pandas>=2.3,<3",
     "py3dmol==2.5.5",
-    "rich==14.1.0",
+    "rdkit==2026.3.4",
     "torch==2.12.0",
+    "torchmd-net==3.1.0",
     "zarr>=3,<4",
 ]
 
 [dependency-groups]
-notebook = [
+kernel = [
+    "ipython>=9,<10",
     "ipykernel>=7,<8",
+    "ipywidgets>=8.1,<9",
+]
+lab = [
     "jupyterlab>=4,<5",
 ]
 test = [
+    "packaging>=26,<27",
     "pytest>=8,<9",
     "ruff>=0.11,<1",
 ]
 
 [tool.uv]
-default-groups = ["notebook", "test"]
+default-groups = ["kernel", "lab", "test"]
 index-strategy = "unsafe-best-match"
 package = false
+override-dependencies = [
+    "dm-tree==0.1.10",
+    # torchmd-net 3.1.0 declares setuptools>=82 but does not import it; torch 2.12.0 needs setuptools<82.
+    "setuptools<82",
+    "nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@6702138e404d40ea79dec62f68c2fa67e858580e",
+]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }

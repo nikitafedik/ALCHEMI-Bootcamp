@@ -1,8 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Download and verify model assets for the Core playbook."""
 
 from __future__ import annotations
 
-import hashlib
 import os
 import tempfile
 import tomllib
@@ -12,26 +14,13 @@ from typing import Any
 
 from aimnet.calculators.model_registry import get_model_path
 
+if __package__:
+    from .runtime_files import require_file_sha256, sha256_file
+else:
+    from runtime_files import require_file_sha256, sha256_file
+
 ROOT = Path(__file__).resolve().parents[1]
 PINS = tomllib.loads((ROOT / "environment" / "runtime-pins.toml").read_text())
-
-
-def sha256_file(path: Path) -> str:
-    """Return a file SHA-256 digest."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def require_file_sha256(label: str, path: Path, expected_sha256: str) -> None:
-    """Require an existing regular file with the pinned SHA-256 digest."""
-    if not path.is_file():
-        raise RuntimeError(f"{label} is missing: {path}")
-    actual = sha256_file(path)
-    if actual != expected_sha256:
-        raise RuntimeError(f"{label}: expected {expected_sha256}, found {actual}")
 
 
 def ensure_pinned_asset(
@@ -84,14 +73,23 @@ def generate_d3_parameter_file(path: Path) -> None:
         raise RuntimeError(f"D3 parameters saved to unexpected path: {saved_path}")
 
 
+def resolve_mace_checkpoint(alias: str) -> str | Path:
+    """Resolve a named checkpoint through MACE's official cache helper."""
+
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
+
+    return download_mace_mp_checkpoint(alias)
+
+
 def main(
     *,
     pins: dict[str, Any] | None = None,
     environment: Mapping[str, str] | None = None,
     model_resolver: Callable[[str], str | Path] = get_model_path,
+    mace_model_resolver: Callable[[str], str | Path] = resolve_mace_checkpoint,
     d3_generator: Callable[[Path], None] = generate_d3_parameter_file,
 ) -> None:
-    """Create and verify the fixed AIMNet and D3 runtime assets."""
+    """Create and verify the fixed AIMNet, MACE, and D3 runtime assets."""
     pins = PINS if pins is None else pins
     environment = os.environ if environment is None else environment
     model = pins["model"]
@@ -101,6 +99,15 @@ def main(
     if actual != expected:
         raise RuntimeError(f"AIMNet checkpoint: expected {expected}, found {actual}")
     print(f"AIMNet checkpoint verified: {path}")
+
+    mace = pins["mace"]
+    mace_path = Path(mace_model_resolver(mace["checkpoint_alias"])).resolve()
+    require_file_sha256(
+        "MACE checkpoint",
+        mace_path,
+        mace["checkpoint_sha256"],
+    )
+    print(f"MACE checkpoint verified: {mace_path}")
 
     configured_d3_path = environment.get("ALCHEMI_D3_PARAM_FILE")
     if not configured_d3_path:

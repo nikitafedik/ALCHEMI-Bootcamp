@@ -1,14 +1,22 @@
-"""Verify that a command is using the locked v3 tutorial runtime."""
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Verify that a command is using the locked tutorial runtime."""
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import json
 import os
 import sys
+import sysconfig
 import tomllib
 from pathlib import Path
+
+if __package__:
+    from .runtime_files import require_file_sha256, sha256_file
+else:
+    from runtime_files import require_file_sha256, sha256_file
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = tomllib.loads((ROOT / "environment" / "runtime-pins.toml").read_text())
@@ -42,19 +50,22 @@ def require_equal(label: str, actual: str, expected: str) -> None:
         raise RuntimeError(f"{label}: expected {expected}, found {actual}")
 
 
-def require_file_sha256(label: str, path: Path, expected: str) -> None:
-    """Require an existing regular file with the pinned SHA-256 digest."""
-    if not path.is_file():
-        raise RuntimeError(f"{label} is missing: {path}")
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    require_equal(f"{label} SHA-256", actual, expected)
+def require_python_headers(include_directory: Path | None = None) -> Path:
+    """Require the Python C header used by Triton's CUDA launcher build."""
+    directory = include_directory or Path(sysconfig.get_path("include"))
+    header = directory / "Python.h"
+    if not header.is_file():
+        raise RuntimeError(
+            "Python development header is missing: "
+            f"{header}. Recreate the environment with uv managed Python."
+        )
+    return header
 
 
 def main() -> None:
     """Check Python, package versions, VCS commits, and runtime assets."""
-    require_equal(
-        "Python", f"{sys.version_info.major}.{sys.version_info.minor}", PINS["python"]
-    )
+    require_equal("Python", sys.version.split()[0], PINS["python"])
+    require_python_headers()
 
     for section in ("toolkit", "toolkit_ops"):
         pin = PINS[section]
@@ -68,11 +79,12 @@ def main() -> None:
         ("torch", PINS["torch"]),
         (PINS["model"]["package"], PINS["model"]["package_version"]),
         (PINS["mace"]["package"], PINS["mace"]["package_version"]),
+        (PINS["rdkit"]["package"], PINS["rdkit"]["package_version"]),
         (
             PINS["structure_viewer"]["package"],
             PINS["structure_viewer"]["package_version"],
         ),
-        ("ase", "3.27.0"),
+        ("ase", PINS["ase"]),
     ):
         actual = importlib.metadata.version(name).split("+")[0]
         require_equal(f"{name} version", actual, expected)
@@ -88,6 +100,8 @@ def main() -> None:
         "MPLCONFIGDIR",
         "RUFF_CACHE_DIR",
         "TORCH_HOME",
+        "TORCHINDUCTOR_CACHE_DIR",
+        "TRITON_CACHE_DIR",
         "UV_CACHE_DIR",
         "WARP_CACHE_PATH",
         "XDG_CACHE_HOME",
@@ -119,16 +133,32 @@ def main() -> None:
             f"3Dmol.js {filename}", viewer_directory / filename, expected
         )
 
+    require_file_sha256(
+        "py3Dmol license",
+        ROOT / viewer["python_license_directory"] / "LICENSE.txt",
+        viewer["python_license_sha256"],
+    )
+
     checkpoint_name = "aimnet2_wb97m_d3_0.pt"
     checkpoint_path = Path(os.environ["AIMNET_CACHE_DIR"]) / checkpoint_name
-    checkpoint_sha256 = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+    checkpoint_sha256 = sha256_file(checkpoint_path)
     require_equal(
         f"{checkpoint_name} SHA-256",
         checkpoint_sha256,
         PINS["model"]["checkpoint_sha256"],
     )
 
-    print("v3 runtime verified")
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
+
+    mace = PINS["mace"]
+    mace_path = Path(download_mace_mp_checkpoint(mace["checkpoint_alias"])).resolve()
+    require_file_sha256(
+        "MACE checkpoint",
+        mace_path,
+        mace["checkpoint_sha256"],
+    )
+
+    print("ALCHEMI runtime verified")
     print(f"Python: {sys.version.split()[0]}")
     print(f"Toolkit: {PINS['toolkit']['commit']}")
     print(f"Toolkit-Ops: {PINS['toolkit_ops']['commit']}")

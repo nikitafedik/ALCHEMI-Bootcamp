@@ -1,0 +1,18 @@
+The files in this folder (liquid-train.extxyz.gz, liquid-heldout.extxyz.gz, cut-record.json) are adapted from:
+
+  Hamedani, A., & E. Sand, A. (2025). Research data for: "SiC-TGAP: A machine learning interatomic potential
+  for radiation damage simulations in 3C-SiC" [Data set]. Zenodo. https://doi.org/10.5281/zenodo.17182227
+
+The source data are licensed under the Creative Commons Attribution 4.0 International licence (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/ (legal code: https://creativecommons.org/licenses/by/4.0/legalcode).
+The adapted files here are shared under the same licence.
+
+Changes made to the source (file dataset-SiC-TGAP.xyz, SHA-256
+071463f8584b12cd505231ccf00ceb6000885f37484fbd8d006092a3eb931500):
+- 360 of the 3,000 frames kept: the frame types melt_aimd, eqlMelt_aimd, quench_aimd and amorph_aimd;
+  the other frames dropped.
+- Split by density: the frames at 2.7 g/cm3 in liquid-heldout.extxyz.gz, the rest in liquid-train.extxyz.gz.
+- Per frame, the DFT total energy is stored as dft_energy and the DFT forces as dft_forces; the virial and stress
+  are dropped; config_type and sub_config are kept; source_index gives the frame's 0-based index in the source.
+- Compressed with gzip.
+The script that makes these changes is ../cut_liquid.py. No warranty is given by the authors or by NVIDIA.

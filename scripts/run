@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+set -euo pipefail
+
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
+uv_bin="${ALCHEMI_UV_BIN:-uv}"
+
+# shellcheck source=scripts/runtime-env.sh
+source "${repository_root}/scripts/runtime-env.sh"
+alchemi_configure_runtime "${runtime_root}"
+
+if [[ ! -x "${UV_PROJECT_ENVIRONMENT}/bin/python" ]]; then
+    echo "Shared environment is missing. Run ./scripts/setup first." >&2
+    exit 1
+fi
+
+exec "${uv_bin}" run --project "${repository_root}" --frozen --no-sync "$@"
